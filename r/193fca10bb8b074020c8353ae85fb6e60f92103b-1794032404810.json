@@ -1,0 +1,203 @@
+{
+  "v": 2,
+  "id": "zc_mw60kn5c_3469",
+  "sid": "s_mw60kn5a_7z6n",
+  "repo": "umerhammaz/mentions",
+  "ts": 1794032404810,
+  "sha": "193fca10bb8b074020c8353ae85fb6e60f92103b",
+  "branch": "main",
+  "delivery": "direct",
+  "msgSubj": "feat(sync): Synchronized 23 file(s) across 3 prompt turn(s)",
+  "msgHash": "ee85c0cc0dc4363d",
+  "files": [
+    [
+      "index.html",
+      "a",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "404.html",
+      "a",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/css/tokens.css",
+      "a",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/css/reset.css",
+      "a",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/css/base.css",
+      "a",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/css/layout.css",
+      "a",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/css/components.css",
+      "a",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/css/screens.css",
+      "a",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/icons.svg",
+      "a",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/js/dom.js",
+      "a",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/js/store.js",
+      "a",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/js/api.js",
+      "m",
+      "ai",
+      2,
+      0
+    ],
+    [
+      "assets/js/a11y.js",
+      "a",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/js/router.js",
+      "a",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/js/ws.js",
+      "m",
+      "ai",
+      2,
+      0
+    ],
+    [
+      "assets/js/ui.js",
+      "a",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/js/main.js",
+      "a",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/js/screens/commands.js",
+      "a",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/js/screens/editor.js",
+      "a",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/js/screens/settings.js",
+      "a",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/js/screens/pair.js",
+      "a",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/js/screens/notfound.js",
+      "a",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "test/stub-daemon.cjs",
+      "m",
+      "ai",
+      3,
+      0
+    ]
+  ],
+  "sum": {
+    "files": 23,
+    "add": 20,
+    "mod": 3,
+    "del": 0,
+    "src": {
+      "ai": 23
+    }
+  },
+  "warn": {
+    "quarantine": 0,
+    "halluc": 0,
+    "secret": 0,
+    "runtime": 0,
+    "override": false
+  },
+  "safety": {
+    "canary": "8/8",
+    "vault": "persistent"
+  },
+  "base": {
+    "gen": 1,
+    "anc": "T",
+    "race": 0
+  },
+  "verify": 1,
+  "ms": 7745,
+  "hash": "5bfbc66bbb2c035b"
+}
