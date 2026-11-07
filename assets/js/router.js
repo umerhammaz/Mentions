@@ -4,8 +4,13 @@ const routes = [];
 
 export function route(pattern, screen) {
   const keys = [];
-  const re = new RegExp("^" + pattern.replace(/:(\w+)/g, (_, k) => { keys.push(k); return "([^/]+)"; }) + "$");
-  routes.push({ re, keys, screen });
+  if (pattern === "*") {
+    routes.push({ re: /^.*$/, keys, screen });
+    return;
+  }
+  const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const withParams = escaped.replace(/:(\w+)/g, (_, k) => { keys.push(k); return "([^/]+)"; });
+  routes.push({ re: new RegExp("^" + withParams + "$"), keys, screen });
 }
 
 export function startRouter({ root, defaultTitle = "Mentions" }) {
