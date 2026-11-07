@@ -1,0 +1,53 @@
+@layer screens {
+  .cmds__head {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--space-4);
+    margin-bottom: var(--space-4);
+    flex-wrap: wrap;
+  }
+  .cmds__count { margin-top: var(--space-2); }
+  .cmds__filter { margin-bottom: var(--space-3); max-width: 420px; }
+
+  .editor {
+    display: flex; flex-direction: column; gap: var(--space-5);
+    max-width: 760px;
+  }
+  .editor__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+  .editor__grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5); align-items: start; }
+  .editor__form { display: flex; flex-direction: column; gap: var(--space-4); }
+  .editor__preview { position: sticky; top: calc(var(--appbar-h) + var(--space-4)); }
+  .editor__actions { display: flex; gap: var(--space-2); align-items: center; justify-content: flex-end; }
+  .editor__unsaved {
+    display: flex; gap: var(--space-2); align-items: center;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-control);
+    background: var(--warning-container);
+    font-size: var(--fs-label);
+    color: var(--on-warning);
+  }
+
+  .settings__section {
+    padding-block: var(--space-5);
+    border-top: var(--border-structure);
+    display: flex; flex-direction: column; gap: var(--space-3);
+    max-width: 720px;
+  }
+  .settings__section:first-of-type { border-top: 0; padding-top: 0; }
+  .settings__section-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+  .settings__status { color: var(--on-surface-variant); font-size: var(--fs-caption); font-variant-numeric: tabular-nums; }
+  .settings__row { display: flex; justify-content: space-between; gap: var(--space-4); align-items: flex-start; flex-wrap: wrap; }
+  .settings__row-text { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 2px; }
+
+  .pair {
+    max-width: 480px; margin-inline: auto; margin-top: var(--space-8);
+    display: flex; flex-direction: column; gap: var(--space-4);
+  }
+  .pair__code {
+    font-family: var(--font-mono); font-size: 22px; letter-spacing: 0.2em;
+    text-align: center; padding: var(--space-3);
+  }
+
+  @media (max-width: 959px) {
+    .editor__grid { grid-template-columns: 1fr; }
+    .editor__preview { position: static; }
+  }
+}

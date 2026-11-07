@@ -1,0 +1,91 @@
+@layer reset, tokens, base, layout, components, screens, utilities;
+
+:root {
+  color-scheme: light dark;
+  --font-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Code", "SF Mono", monospace;
+  --fs-display: 28px; --lh-display: 36px;
+  --fs-headline: 22px; --lh-headline: 30px;
+  --fs-title: 17px; --lh-title: 24px;
+  --fs-body: 15px; --lh-body: 22px;
+  --fs-label: 13px; --lh-label: 18px;
+  --fs-caption: 12px; --lh-caption: 16px;
+  --fs-mono: 13px; --lh-mono: 20px;
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+  --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-10: 40px;
+  --space-12: 48px;
+  --radius-control: 8px;
+  --radius-container: 12px;
+  --radius-pill: 999px;
+  --border-structure: 1px solid var(--outline-variant);
+  --border-state: 1.5px solid var(--accent);
+  --dur-1: 120ms; --dur-2: 180ms; --dur-3: 240ms; --dur-4: 320ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --focus-ring: 2px solid var(--accent);
+  --focus-offset: 2px;
+  --appbar-h: 56px;
+  --rail-w: 220px;
+  --rail-compact: 72px;
+  --surface: oklch(98.5% 0.005 80);
+  --surface-container: oklch(96% 0.008 80);
+  --surface-container-high: oklch(93% 0.01 80);
+  --on-surface: oklch(20% 0.015 60);
+  --on-surface-variant: oklch(42% 0.015 60);
+  --outline: oklch(60% 0.01 60);
+  --outline-variant: oklch(88% 0.008 80);
+  --primary: oklch(20% 0.015 60);
+  --on-primary: oklch(98.5% 0.005 80);
+  --accent: oklch(58% 0.16 40);
+  --on-accent: oklch(98% 0.01 40);
+  --success: oklch(50% 0.12 145);
+  --on-success: oklch(98% 0.01 145);
+  --warning: oklch(62% 0.14 75);
+  --on-warning: oklch(22% 0.02 75);
+  --danger: oklch(52% 0.18 25);
+  --on-danger: oklch(98% 0.01 25);
+  --info: oklch(52% 0.12 240);
+  --on-info: oklch(98% 0.01 240);
+  --success-container: oklch(94% 0.04 145);
+  --warning-container: oklch(95% 0.05 75);
+  --danger-container: oklch(94% 0.04 25);
+  --info-container: oklch(94% 0.03 240);
+  --surface-elev-1: 0 1px 2px oklch(20% 0.02 60 / 0.06), 0 1px 3px oklch(20% 0.02 60 / 0.04);
+  --surface-elev-2: 0 2px 4px oklch(20% 0.02 60 / 0.08), 0 4px 8px oklch(20% 0.02 60 / 0.06);
+  --surface-elev-3: 0 8px 16px oklch(20% 0.02 60 / 0.12), 0 2px 4px oklch(20% 0.02 60 / 0.08);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface: oklch(18% 0.01 60);
+    --surface-container: oklch(22% 0.012 60);
+    --surface-container-high: oklch(26% 0.014 60);
+    --on-surface: oklch(94% 0.008 80);
+    --on-surface-variant: oklch(72% 0.015 80);
+    --outline: oklch(50% 0.015 60);
+    --outline-variant: oklch(32% 0.012 60);
+    --primary: oklch(94% 0.008 80);
+    --on-primary: oklch(18% 0.01 60);
+    --accent: oklch(70% 0.15 45);
+    --on-accent: oklch(18% 0.02 40);
+    --success: oklch(72% 0.14 145);
+    --on-success: oklch(18% 0.02 145);
+    --warning: oklch(78% 0.14 75);
+    --on-warning: oklch(20% 0.02 75);
+    --danger: oklch(72% 0.17 25);
+    --on-danger: oklch(18% 0.02 25);
+    --info: oklch(70% 0.13 240);
+    --on-info: oklch(18% 0.02 240);
+    --success-container: oklch(28% 0.06 145);
+    --warning-container: oklch(30% 0.06 75);
+    --danger-container: oklch(30% 0.08 25);
+    --info-container: oklch(28% 0.05 240);
+    --surface-elev-1: 0 1px 3px oklch(0% 0 0 / 0.4);
+    --surface-elev-2: 0 4px 8px oklch(0% 0 0 / 0.5);
+    --surface-elev-3: 0 12px 24px oklch(0% 0 0 / 0.6);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-1: 0ms; --dur-2: 0ms; --dur-3: 0ms; --dur-4: 0ms; }
+}

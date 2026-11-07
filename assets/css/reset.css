@@ -1,0 +1,29 @@
+@layer reset {
+  *, *::before, *::after { box-sizing: border-box; }
+  * { margin: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: var(--font-sans);
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+    background: var(--surface);
+    color: var(--on-surface);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  img, svg { display: block; max-width: 100%; }
+  button, input, textarea, select { font: inherit; color: inherit; }
+  button { background: none; border: 0; padding: 0; cursor: pointer; }
+  a { color: inherit; }
+  h1, h2, h3, h4 { font-weight: 600; line-height: 1.2; }
+  ul, ol { list-style: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; }
+  dialog { border: 0; padding: 0; background: transparent; }
+  :focus { outline: none; }
+  :focus-visible {
+    outline: var(--focus-ring);
+    outline-offset: var(--focus-offset);
+    border-radius: var(--radius-control);
+  }
+  ::selection { background: color-mix(in oklab, var(--accent) 30%, transparent); }
+}

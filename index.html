@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mentions</title>
+<meta name="description" content="Local controller for the Mentions daemon.">
+<link rel="preload" href="/assets/fonts/plex-sans-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/plex-mono.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/css/tokens.css">
+<link rel="stylesheet" href="/assets/css/reset.css">
+<link rel="stylesheet" href="/assets/css/base.css">
+<link rel="stylesheet" href="/assets/css/layout.css">
+<link rel="stylesheet" href="/assets/css/components.css">
+<link rel="stylesheet" href="/assets/css/screens.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="appbar">
+  <h1 class="appbar__title">Mentions</h1>
+  <div id="status" class="appbar__status" aria-live="polite"></div>
+  <button id="hook-toggle" class="btn btn--quiet" hidden aria-pressed="false">Pause</button>
+</header>
+
+<nav class="rail" aria-label="Primary">
+  <a class="rail__link" href="/" data-nav="commands">
+    <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#list"/></svg>
+    <span>Commands</span>
+  </a>
+  <a class="rail__link" href="/settings" data-nav="settings">
+    <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#sliders"/></svg>
+    <span>Settings</span>
+  </a>
+</nav>
+
+<div id="banners" class="banners"></div>
+
+<main id="main" tabindex="-1"></main>
+
+<div id="live" class="sr-only" aria-live="polite"></div>
+<div id="alert" class="sr-only" aria-live="assertive"></div>
+
+<dialog id="confirm" class="dialog"></dialog>
+
+<div id="toast-host" class="toast-host" aria-live="polite"></div>
+
+<noscript><p class="noscript">Mentions' controller needs JavaScript. The daemon keeps working without it.</p></noscript>
+
+<script type="module" src="/assets/js/main.js"></script>
+</body>
+</html>
