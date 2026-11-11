@@ -5,7 +5,7 @@ import { route, navigate } from "../router.js";
 import { field } from "../ui.js";
 import { announce, focusFirstInvalid } from "../a11y.js";
 
-const DOWNLOAD_URL = "https://github.com/Zerocommit-dev/Mentions/releases/latest/download/mentions-daemon.exe";
+const DOWNLOAD_URL = "https://github.com/umerhammaz/Mentions/releases/latest/download/mentions-daemon.exe";
 
 const screen = {
   title: "Pair",

@@ -548,11 +548,8 @@ fn is_valid_trigger(trigger: &str) -> bool {
 
 fn is_allowed_origin(origin: &str) -> bool {
     origin == "*"
-        || origin == "https://mentions-but.pages.dev"
         || origin == "https://mentions-blond.vercel.app"
         || origin == "https://mentions.pages.dev"
-        || origin.ends_with(".pages.dev")
-        || origin.ends_with(".vercel.app")
         || origin.starts_with("http://127.0.0.1")
         || origin.starts_with("http://localhost")
 }
@@ -560,7 +557,7 @@ fn is_allowed_origin(origin: &str) -> bool {
 fn header_value(req: &Request, name: &str) -> Option<String> {
     req.headers()
         .iter()
-        .find(|h| h.field.equiv(name))
+        .find(|h| h.field.as_str().as_str().eq_ignore_ascii_case(name))
         .map(|h| h.value.as_str().to_string())
 }
 

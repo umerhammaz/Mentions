@@ -297,7 +297,7 @@ unsafe fn read_clipboard_unicode() -> Option<String> {
 #[cfg(windows)]
 unsafe fn write_stealth_clipboard(text: &str) -> bool {
     use windows_sys::Win32::System::DataExchange::{
-        CloseClipboard, EmptyClipboard, OpenClipboard, RegisterClipboardFormatW, SetClipboardData,
+        CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData,
     };
     use windows_sys::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
 
