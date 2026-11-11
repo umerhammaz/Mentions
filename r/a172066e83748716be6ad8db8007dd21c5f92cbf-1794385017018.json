@@ -1,0 +1,98 @@
+{
+  "v": 2,
+  "id": "zc_mwbuick3_mxtp",
+  "sid": "s_mwbuick0_8lf6",
+  "repo": "umerhammaz/mentions",
+  "ts": 1794385017018,
+  "sha": "a172066e83748716be6ad8db8007dd21c5f92cbf",
+  "branch": "main",
+  "delivery": "direct",
+  "msgSubj": "feat(sync): Synchronized 8 file(s) across 2 prompt turn(s)",
+  "msgHash": "7815174b6d8446fd",
+  "files": [
+    [
+      "Cargo.toml",
+      "a",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "src/main.rs",
+      "a",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "src/store.rs",
+      "a",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "src/hook.rs",
+      "a",
+      "ai",
+      1,
+      2
+    ],
+    [
+      "src/injector.rs",
+      "a",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "src/server.rs",
+      "a",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "src/tray.rs",
+      "m",
+      "ai",
+      2,
+      2
+    ],
+    [
+      "README.md",
+      "m",
+      "ai",
+      1,
+      0
+    ]
+  ],
+  "sum": {
+    "files": 8,
+    "add": 6,
+    "mod": 2,
+    "del": 0,
+    "src": {
+      "ai": 8
+    }
+  },
+  "warn": {
+    "quarantine": 0,
+    "halluc": 2,
+    "secret": 0,
+    "runtime": 0,
+    "override": false
+  },
+  "safety": {
+    "canary": "8/8",
+    "vault": "persistent"
+  },
+  "base": {
+    "gen": 0,
+    "anc": "T",
+    "race": 0
+  },
+  "verify": 1,
+  "ms": 7534,
+  "hash": "bdcb0203ef9770ba"
+}
