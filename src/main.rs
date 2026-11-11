@@ -9,7 +9,7 @@ mod tray;
 use std::sync::{Arc, Mutex};
 use store::AppState;
 
-pub const CONTROLLER_URL: &str = "https://mentions-blond.vercel.app";
+pub const CONTROLLER_URL: &str = "https://mentions-but.pages.dev";
 
 fn main() {
     let _instance_guard = match acquire_single_instance() {

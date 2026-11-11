@@ -13,6 +13,7 @@ import { h } from "./dom.js";
 
 const root = document.getElementById("main");
 const hookToggle = document.getElementById("hook-toggle");
+const downloadBtn = document.getElementById("download-app");
 
 hookToggle.addEventListener("click", async () => {
   const paused = !!state.health?.paused;
@@ -27,7 +28,9 @@ on("state:health", ({ detail }) => {
   const hh = detail.value;
   renderChip(hh);
   refreshBanner(hh);
-  hookToggle.hidden = !(hh?.state === "online" || hh?.state === "paused");
+  const isConnected = hh?.state === "online" || hh?.state === "paused";
+  hookToggle.hidden = !isConnected;
+  if (downloadBtn) downloadBtn.hidden = isConnected;
   hookToggle.textContent = hh?.paused ? "Resume" : "Pause";
   hookToggle.setAttribute("aria-pressed", hh?.paused ? "true" : "false");
   if (hh?.state === "online" || hh?.state === "paused") connectWS();
@@ -81,4 +84,4 @@ if (!tokenGet(location.origin) && !location.pathname.startsWith("/pair")) {
 startRouter({ root });
 set("health", { state: "connecting" });
 renderChip({ state: "connecting" });
-healthLoop({ onResult: (h) => set("health", { ...h, lastCheckedAt: Date.now() }) });
+healthLoop({ onResult: (res) => set("health", { ...res, lastCheckedAt: Date.now() }) });

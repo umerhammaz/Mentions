@@ -8,8 +8,8 @@ export function renderChip(health) {
   host.replaceChildren(chipFor(health));
 }
 
-function chipFor(h) {
-  const s = h?.state || "unknown";
+function chipFor(health) {
+  const s = health?.state || "unknown";
   const labelMap = {
     unknown: "Checking...",
     connecting: "Checking...",

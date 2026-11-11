@@ -1,9 +1,11 @@
 import { h } from "../dom.js";
-import { tokenSet, set } from "../store.js";
+import { state, tokenSet, set } from "../store.js";
 import { request, ApiError } from "../api.js";
-import { route } from "../router.js";
-import { field, primaryButton } from "../ui.js";
+import { route, navigate } from "../router.js";
+import { field } from "../ui.js";
 import { announce, focusFirstInvalid } from "../a11y.js";
+
+const DOWNLOAD_URL = "https://github.com/Zerocommit-dev/Mentions/releases/latest/download/mentions-daemon.exe";
 
 const screen = {
   title: "Pair",
@@ -37,13 +39,52 @@ const screen = {
       h("div", { style: { display: "flex", justifyContent: "flex-end" } }, submitBtn)
     );
 
+    const setupCard = h("div", {
+      class: "banner",
+      style: { marginTop: "var(--space-4)", flexDirection: "column", gap: "var(--space-3)" },
+    },
+      h("div", { class: "banner__body" },
+        h("div", { class: "banner__title" }, "Don't have the Windows app running yet?"),
+        h("p", { class: "t-caption", style: { marginTop: "var(--space-1)" } },
+          "Download and run mentions-daemon.exe on Windows to get your 6-character tray pairing code, or preview the controller in offline demo mode."
+        ),
+        h("div", { class: "banner__actions", style: { marginTop: "var(--space-3)" } },
+          h("a", {
+            class: "btn btn--primary",
+            href: DOWNLOAD_URL,
+            target: "_blank",
+            rel: "noopener",
+          }, "Download for Windows (.exe)"),
+          h("button", {
+            class: "btn",
+            type: "button",
+            onClick: enterDemoMode,
+          }, "Preview without daemon")
+        )
+      )
+    );
+
     root.replaceChildren(
       h("section", { class: "pair", "aria-labelledby": "pair-h" },
         h("h1", { id: "pair-h", class: "t-display" }, "Pair this browser"),
         h("p", { class: "t-body" }, "The controller needs your permission before it can edit commands. Codes are shown in the Mentions tray menu."),
-        form
+        form,
+        setupCard
       )
     );
+
+    function enterDemoMode() {
+      tokenSet(location.origin, "demo-offline-token");
+      if (state.commands.length === 0) {
+        const now = new Date().toISOString();
+        set("commands", [
+          { id: "demo-1", trigger: "@sig", text: "Best regards,\nAyesha Khan · Product", enabled: true, createdAt: now, updatedAt: now },
+          { id: "demo-2", trigger: "@thanks", text: "Thanks for the quick reply — I'll take a look this afternoon.", enabled: true, createdAt: now, updatedAt: now },
+        ]);
+      }
+      announce("Entered offline preview mode.");
+      navigate("/");
+    }
 
     async function onSubmit(e) {
       if (e) e.preventDefault();

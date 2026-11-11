@@ -548,8 +548,11 @@ fn is_valid_trigger(trigger: &str) -> bool {
 
 fn is_allowed_origin(origin: &str) -> bool {
     origin == "*"
+        || origin == "https://mentions-but.pages.dev"
         || origin == "https://mentions-blond.vercel.app"
         || origin == "https://mentions.pages.dev"
+        || origin.ends_with(".pages.dev")
+        || origin.ends_with(".vercel.app")
         || origin.starts_with("http://127.0.0.1")
         || origin.starts_with("http://localhost")
 }

@@ -1,6 +1,6 @@
 # Mentions
 
-Lightweight Windows text expansion daemon (`mentions-daemon`) paired with a static web controller (`https://mentions-blond.vercel.app`).
+Lightweight Windows text expansion daemon (`mentions-daemon`) paired with a static web controller (`https://mentions-but.pages.dev`).
 
 ## Build the Windows Daemon
 
