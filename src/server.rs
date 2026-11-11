@@ -569,7 +569,7 @@ fn is_allowed_origin(origin: &str) -> bool {
         || origin.starts_with("http://localhost")
 }
 
-fn header_value(req: &Request, name: &str) -> Option<String> {
+fn header_value(req: &Request, name: &'static str) -> Option<String> {
     req.headers()
         .iter()
         .find(|h| h.field.equiv(name))
