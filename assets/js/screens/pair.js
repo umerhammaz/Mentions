@@ -9,12 +9,19 @@ const screen = {
   title: "Pair",
   async mount({ root }) {
     const params = new URLSearchParams(location.search);
-    const initial = (params.get("code") || "").toUpperCase().slice(0, 6);
+    const sanitize = (v) => String(v || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+    const initial = sanitize(params.get("code"));
 
     const input = h("input", {
       id: "code", class: "input pair__code", type: "text", maxlength: "6", value: initial,
       inputmode: "text", autocomplete: "one-time-code", spellcheck: "false",
       "aria-describedby": "code-help",
+      oninput: (e) => {
+        const cleaned = sanitize(e.target.value);
+        if (e.target.value !== cleaned) e.target.value = cleaned;
+        input.removeAttribute("aria-invalid");
+        errHost.replaceChildren();
+      },
     });
     const errHost = h("div", { id: "code-err" });
     const submitBtn = h("button", { class: "btn btn--primary", type: "submit" }, "Pair this browser");
@@ -39,8 +46,9 @@ const screen = {
     );
 
     async function onSubmit(e) {
-      e.preventDefault();
-      const code = input.value.trim().toUpperCase();
+      if (e) e.preventDefault();
+      const code = sanitize(input.value);
+      input.value = code;
       if (code.length !== 6) return showError("Enter the 6-character code from the tray.");
       submitBtn.disabled = true;
       submitBtn.textContent = "Pairing...";
@@ -48,6 +56,10 @@ const screen = {
         const res = await request("/api/pair", { method: "POST", body: { code }, auth: false });
         tokenSet(location.origin, res.token);
         set("session", { token: res.token, pairedAt: new Date().toISOString() });
+        try {
+          const hh = await request("/api/health", { auth: false, timeout: 1500 });
+          set("health", { ...hh, state: hh?.paused ? "paused" : "online", lastCheckedAt: Date.now() });
+        } catch {}
         announce("Paired. Loading commands.");
         history.replaceState(null, "", "/");
         window.dispatchEvent(new PopStateEvent("popstate"));
@@ -66,12 +78,16 @@ const screen = {
     }
 
     function showError(msg) {
-      errHost.replaceChildren(h("p", { class: "field__error", role: "alert" }, msg));
+      errHost.replaceChildren(h("p", { class: "field__error", id: "code-err-msg", role: "alert" }, msg));
       input.setAttribute("aria-invalid", "true");
+      input.setAttribute("aria-describedby", "code-help code-err-msg");
       focusFirstInvalid(form);
     }
 
-    setTimeout(() => input.focus(), 0);
+    setTimeout(() => {
+      input.focus();
+      if (initial.length === 6) onSubmit();
+    }, 0);
     return { title: "Pair", unmount() {} };
   },
 };

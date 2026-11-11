@@ -1,4 +1,4 @@
-import { tokenGet } from "./store.js";
+import { tokenGet, tokenClear, state, set } from "./store.js";
 
 export class ApiError extends Error {
   constructor(code, status, extra = {}) {
@@ -17,16 +17,28 @@ const STATUS_MAP = {
   500: "E_INTERNAL",
 };
 
-const BASE = `http://127.0.0.1:${new URLSearchParams(location.search).get("port") || 31415}`;
+function validPort(val) {
+  const n = Number(val);
+  return Number.isInteger(n) && n >= 1024 && n <= 65535 ? n : null;
+}
+
+const urlPort = validPort(new URLSearchParams(location.search).get("port"));
+if (urlPort) setPort(urlPort);
 
 export function setPort(port) {
-  try { sessionStorage.setItem("mentions.port", String(port)); } catch {}
+  const p = validPort(port);
+  if (!p) return;
+  try { sessionStorage.setItem("mentions.port", String(p)); } catch {}
+}
+
+export function getPort() {
+  let override = null;
+  try { override = sessionStorage.getItem("mentions.port"); } catch {}
+  return validPort(override) || 31415;
 }
 
 export function getBase() {
-  let override = null;
-  try { override = sessionStorage.getItem("mentions.port"); } catch {}
-  return `http://127.0.0.1:${override || 31415}`;
+  return `http://127.0.0.1:${getPort()}`;
 }
 
 export async function request(path, { method = "GET", body, timeout = 5000, auth = true } = {}) {
@@ -52,6 +64,10 @@ export async function request(path, { method = "GET", body, timeout = 5000, auth
     const data = text ? safeJSON(text) : null;
     if (!res.ok) {
       const code = data?.code || STATUS_MAP[res.status] || `E_HTTP_${res.status}`;
+      if (res.status === 401 && auth) {
+        tokenClear(location.origin);
+        set("health", { ...(state.health || {}), state: "unpaired", requiresPairing: true });
+      }
       throw new ApiError(code, res.status, {
         field: data?.field,
         message: data?.message,

@@ -12,6 +12,9 @@ export const state = {
 export function set(key, value) {
   const prev = state[key];
   state[key] = value;
+  if (key === "commands" && Array.isArray(value)) {
+    cacheSave(value);
+  }
   bus.dispatchEvent(new CustomEvent(`state:${key}`, { detail: { value, prev } }));
 }
 
@@ -57,4 +60,10 @@ export function tokenSet(origin, token) {
 
 export function tokenClear(origin) {
   try { localStorage.removeItem(`mentions.token.${origin}`); } catch {}
+}
+
+const initialCache = cacheLoad();
+if (Array.isArray(initialCache) && initialCache.length > 0) {
+  state.commands = initialCache;
+  state.cacheLoaded = true;
 }

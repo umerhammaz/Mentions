@@ -100,8 +100,14 @@ export function overflowMenu(items) {
         ...items.map((it) => h("button", {
           type: "button",
           role: "menuitem",
+          disabled: it.disabled ? true : null,
+          "aria-disabled": it.disabled ? "true" : null,
           "data-danger": it.danger ? "true" : null,
-          onClick: () => { close(); it.onSelect(); },
+          onClick: () => {
+            if (it.disabled) return;
+            close();
+            it.onSelect();
+          },
         }, it.label))
       );
       trigger.parentElement.append(menu);

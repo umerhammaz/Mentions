@@ -49,6 +49,14 @@ export function startRouter({ root, defaultTitle = "Mentions" }) {
     }
 
     const main = document.getElementById("main");
+    if (location.hash) {
+      const target = main.querySelector(location.hash);
+      if (target) {
+        target.scrollIntoView({ block: "start" });
+        announce(`Page: ${document.title.split(" · ")[0]}`);
+        return;
+      }
+    }
     const heading = main.querySelector("h1, h2");
     if (heading) { heading.setAttribute("tabindex", "-1"); moveFocus(heading); }
     else moveFocus(main);
@@ -62,10 +70,12 @@ export function startRouter({ root, defaultTitle = "Mentions" }) {
     if (!href || href.startsWith("http") || href.startsWith("//") || href.startsWith("#")) return;
     if (a.target === "_blank" || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     e.preventDefault();
-    if (location.pathname === href) return;
+    const currentFull = location.pathname + location.search + location.hash;
+    if (currentFull === href) return;
     history.pushState({ scrollY: 0 }, "", href);
-    render();
-    window.scrollTo(0, 0);
+    render().then(() => {
+      if (!location.hash) window.scrollTo(0, 0);
+    });
   });
 
   window.addEventListener("popstate", () => {
@@ -79,7 +89,7 @@ export function startRouter({ root, defaultTitle = "Mentions" }) {
 }
 
 export function navigate(path) {
-  if (location.pathname === path) return;
+  if (location.pathname + location.search + location.hash === path) return;
   history.pushState({ scrollY: 0 }, "", path);
   window.dispatchEvent(new PopStateEvent("popstate"));
 }

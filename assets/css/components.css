@@ -96,7 +96,6 @@
     background: var(--surface);
     border: var(--border-structure);
     border-radius: var(--radius-container);
-    overflow: hidden;
   }
   .table th {
     text-align: start; font-size: var(--fs-label); font-weight: 500;
@@ -154,7 +153,8 @@
     font-size: var(--fs-label);
     color: var(--on-surface);
   }
-  .menu button:hover, .menu button:focus-visible { background: color-mix(in oklab, var(--on-surface) 8%, transparent); outline: none; }
+  .menu button:hover:not(:disabled), .menu button:focus-visible:not(:disabled) { background: color-mix(in oklab, var(--on-surface) 8%, transparent); outline: none; }
+  .menu button:disabled { opacity: 0.45; cursor: not-allowed; }
   .menu button[data-danger="true"] { color: var(--danger); }
 
   .dialog {

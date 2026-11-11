@@ -30,8 +30,8 @@ on("state:health", ({ detail }) => {
   hookToggle.hidden = !(hh?.state === "online" || hh?.state === "paused");
   hookToggle.textContent = hh?.paused ? "Resume" : "Pause";
   hookToggle.setAttribute("aria-pressed", hh?.paused ? "true" : "false");
-  if (hh?.state === "online") connectWS();
-  else disconnectWS();
+  if (hh?.state === "online" || hh?.state === "paused") connectWS();
+  else if (hh?.state !== "connecting") disconnectWS();
 });
 
 function refreshBanner(hh) {

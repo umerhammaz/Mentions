@@ -1,29 +1,50 @@
-import { request } from "./api.js";
-import { state, set, emit } from "./store.js";
+import { request, getPort } from "./api.js";
+import { state, set, emit, tokenGet } from "./store.js";
 
 let ws = null;
 let stopped = false;
 let attempt = 0;
 let timer = null;
+let reloadTimer = null;
+let reloadInFlight = false;
+
+async function syncCommands() {
+  if (reloadInFlight) return;
+  reloadInFlight = true;
+  try {
+    const list = await request("/api/commands");
+    set("commands", list?.commands || []);
+    emit("commands:changed");
+  } catch {} finally {
+    reloadInFlight = false;
+  }
+}
 
 export function connectWS() {
-  if (ws || stopped) return;
+  stopped = false;
+  clearTimeout(timer);
+  timer = null;
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
   const h = state.health;
-  if (!h || h.state !== "online") return;
+  if (!h || (h.state !== "online" && h.state !== "paused")) return;
+  const tok = tokenGet(location.origin);
   const url = new URL("/ws", getBaseWS());
-  try { ws = new WebSocket(url); } catch { return; }
+  if (tok) url.searchParams.set("token", tok);
+  try { ws = new WebSocket(url.toString()); } catch { ws = null; return; }
   ws.addEventListener("open", () => { attempt = 0; });
-  ws.addEventListener("message", async (e) => {
+  ws.addEventListener("message", (e) => {
     let msg;
     try { msg = JSON.parse(e.data); } catch { return; }
     if (msg.type === "commands.changed") {
-      try {
-        const list = await request("/api/commands");
-        set("commands", list.commands || []);
-        emit("commands:changed");
-      } catch {}
+      clearTimeout(reloadTimer);
+      reloadTimer = setTimeout(syncCommands, 120);
     } else if (msg.type === "hook.state") {
-      set("health", { ...state.health, paused: !!msg.paused });
+      const paused = !!msg.paused;
+      set("health", {
+        ...state.health,
+        paused,
+        state: paused ? "paused" : "online",
+      });
     } else if (msg.type === "daemon.stopping") {
       emit("daemon:stopping");
     }
@@ -41,12 +62,19 @@ export function connectWS() {
 export function disconnectWS() {
   stopped = true;
   clearTimeout(timer);
+  clearTimeout(reloadTimer);
+  timer = null;
   try { ws?.close(); } catch {}
   ws = null;
 }
 
-function getBaseWS() {
-  let port = 31415;
-  try { port = sessionStorage.getItem("mentions.port") || 31415; } catch {}
-  return `http://127.0.0.1:${port}`;
+export function getBaseWS() {
+  return `ws://127.0.0.1:${getPort()}`;
 }
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && !stopped && !ws) {
+    attempt = 0;
+    connectWS();
+  }
+});
