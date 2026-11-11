@@ -1,3 +1,4 @@
+#![allow(unused_imports)]
 use crate::injector::{self, SELF_STAMP};
 use crate::store::{self as _store, AppState};
 use std::sync::mpsc::{self, Sender};

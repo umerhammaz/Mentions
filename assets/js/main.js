@@ -77,7 +77,8 @@ function refreshBanner(hh) {
   }
 }
 
-if (!tokenGet(location.origin) && !location.pathname.startsWith("/pair")) {
+const hasCodeParam = new URLSearchParams(location.search).has("code");
+if ((!tokenGet(location.origin) || hasCodeParam) && !location.pathname.startsWith("/pair")) {
   history.replaceState(null, "", "/pair" + location.search);
 }
 

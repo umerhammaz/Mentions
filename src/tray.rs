@@ -1,3 +1,4 @@
+#![allow(unused_imports)]
 use crate::server::{self as _server, WsHub};
 use crate::store::{self, AppState};
 use serde_json::json;
@@ -12,7 +13,8 @@ static TRAY_CTX: OnceLock<TrayContext> = OnceLock::new();
 
 #[cfg(windows)]
 const WM_TRAYICON: u32 = windows_sys::Win32::UI::WindowsAndMessaging::WM_APP + 1;
-const ID_OPEN: usize = 1001;
+const ID_OPEN_CF: usize = 1001;
+const ID_OPEN_VERCEL: usize = 1006;
 const ID_OPEN_LOCAL: usize = 1005;
 const ID_PAIR: usize = 1002;
 const ID_TOGGLE_PAUSE: usize = 1003;
@@ -75,7 +77,8 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
             WM_COMMAND => {
                 let cmd = wparam & 0xFFFF;
                 match cmd {
-                    ID_OPEN => launch_controller(),
+                    ID_OPEN_CF => launch_controller_for(super::CF_CONTROLLER_URL),
+                    ID_OPEN_VERCEL => launch_controller_for(super::VERCEL_CONTROLLER_URL),
                     ID_OPEN_LOCAL => launch_local_controller(),
                     ID_PAIR => launch_pairing(),
                     ID_TOGGLE_PAUSE => toggle_pause(),
@@ -114,8 +117,9 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
             return;
         }
 
-        let open_lbl: Vec<u16> = "Open Web Controller\0".encode_utf16().collect();
-        let local_lbl: Vec<u16> = "Open Local Controller (Offline)\0".encode_utf16().collect();
+        let cf_lbl: Vec<u16> = "Open Controller (Cloudflare)\0".encode_utf16().collect();
+        let vercel_lbl: Vec<u16> = "Open Controller (Vercel)\0".encode_utf16().collect();
+        let local_lbl: Vec<u16> = "Open Local Controller (127.0.0.1)\0".encode_utf16().collect();
         let pair_lbl: Vec<u16> = format!("Pair Browser (Code: {})\0", code)
             .encode_utf16()
             .collect();
@@ -126,8 +130,10 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
         };
         let quit_lbl: Vec<u16> = "Quit Mentions\0".encode_utf16().collect();
 
-        AppendMenuW(menu, MF_STRING, ID_OPEN, open_lbl.as_ptr());
+        AppendMenuW(menu, MF_STRING, ID_OPEN_CF, cf_lbl.as_ptr());
+        AppendMenuW(menu, MF_STRING, ID_OPEN_VERCEL, vercel_lbl.as_ptr());
         AppendMenuW(menu, MF_STRING, ID_OPEN_LOCAL, local_lbl.as_ptr());
+        AppendMenuW(menu, MF_SEPARATOR, 0, std::ptr::null());
         AppendMenuW(menu, MF_STRING, ID_PAIR, pair_lbl.as_ptr());
         AppendMenuW(menu, MF_STRING, ID_TOGGLE_PAUSE, pause_lbl.as_ptr());
         AppendMenuW(menu, MF_SEPARATOR, 0, std::ptr::null());
@@ -148,19 +154,26 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
         DestroyMenu(menu);
     }
 
+    fn current_code_and_port(ctx: &TrayContext) -> (bool, String, u16) {
+        let mut s = ctx.state.lock().unwrap();
+        if store::now_secs() > s.pair_expires_at {
+            s.refresh_pair_code();
+        }
+        (s.tokens.is_empty(), s.pair_code.clone(), s.settings.port)
+    }
+
     fn launch_controller() {
-        let base = super::CONTROLLER_URL;
+        launch_controller_for(super::CONTROLLER_URL);
+    }
+
+    fn launch_controller_for(base: &str) {
         let Some(ctx) = TRAY_CTX.get() else {
             open_browser(base);
             return;
         };
-        let (needs_pair, code, port) = {
-            let mut s = ctx.state.lock().unwrap();
-            let code = s.refresh_pair_code();
-            (s.tokens.is_empty(), code, s.settings.port)
-        };
+        let (needs_pair, code, port) = current_code_and_port(ctx);
         if needs_pair {
-            let url = format!("{}/pair?code={}&port={}", base, code, port);
+            let url = format!("{}/?code={}&port={}", base, code, port);
             open_browser(&url);
         } else if port != 31415 {
             let url = format!("{}/?port={}", base, port);
@@ -175,11 +188,8 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
             open_browser("http://127.0.0.1:31415");
             return;
         };
-        let (code, port) = {
-            let mut s = ctx.state.lock().unwrap();
-            (s.refresh_pair_code(), s.settings.port)
-        };
-        let url = format!("http://127.0.0.1:{}/pair?code={}&port={}", port, code, port);
+        let (_, code, port) = current_code_and_port(ctx);
+        let url = format!("http://127.0.0.1:{}/?code={}&port={}", port, code, port);
         open_browser(&url);
     }
 
@@ -187,11 +197,8 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
         let Some(ctx) = TRAY_CTX.get() else {
             return;
         };
-        let (code, port) = {
-            let mut s = ctx.state.lock().unwrap();
-            (s.refresh_pair_code(), s.settings.port)
-        };
-        let url = format!("{}/pair?code={}&port={}", super::CONTROLLER_URL, code, port);
+        let (_, code, port) = current_code_and_port(ctx);
+        let url = format!("{}/?code={}&port={}", super::CONTROLLER_URL, code, port);
         open_browser(&url);
     }
 

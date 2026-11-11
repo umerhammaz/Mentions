@@ -124,7 +124,6 @@ impl AppState {
             let token = format!("mnt_{}_{}", random_hex(16), random_hex(16));
             self.tokens.push(token.clone());
             self.save_tokens();
-            self.refresh_pair_code();
             Ok(token)
         } else {
             self.failed_pair_attempts += 1;

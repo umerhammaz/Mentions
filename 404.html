@@ -3,16 +3,49 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Not found · Mentions</title>
+<title>Mentions</title>
+<meta name="description" content="Local controller for the Mentions daemon.">
 <link rel="stylesheet" href="/assets/css/tokens.css">
 <link rel="stylesheet" href="/assets/css/reset.css">
 <link rel="stylesheet" href="/assets/css/base.css">
+<link rel="stylesheet" href="/assets/css/layout.css">
+<link rel="stylesheet" href="/assets/css/components.css">
+<link rel="stylesheet" href="/assets/css/screens.css">
 </head>
 <body>
-<main class="container" style="padding-block:var(--space-12)">
-  <h1 class="t-headline">Page not found</h1>
-  <p class="t-body" style="margin-top:var(--space-3)">This URL isn't a Mentions screen.</p>
-  <p style="margin-top:var(--space-4)"><a class="btn btn--primary" href="/">Go to Commands</a></p>
-</main>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="appbar">
+  <h1 class="appbar__title">Mentions</h1>
+  <div id="status" class="appbar__status" aria-live="polite"></div>
+  <a id="download-app" class="btn" href="https://github.com/umerhammaz/Mentions/releases/latest/download/mentions-daemon.exe" target="_blank" rel="noopener">Download for Windows</a>
+  <button id="hook-toggle" class="btn btn--quiet" hidden aria-pressed="false">Pause</button>
+</header>
+
+<nav class="rail" aria-label="Primary">
+  <a class="rail__link" href="/" data-nav="commands">
+    <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#list"/></svg>
+    <span>Commands</span>
+  </a>
+  <a class="rail__link" href="/settings" data-nav="settings">
+    <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#sliders"/></svg>
+    <span>Settings</span>
+  </a>
+</nav>
+
+<div id="banners" class="banners"></div>
+
+<main id="main" tabindex="-1"></main>
+
+<div id="live" class="sr-only" aria-live="polite"></div>
+<div id="alert" class="sr-only" aria-live="assertive"></div>
+
+<dialog id="confirm" class="dialog"></dialog>
+
+<div id="toast-host" class="toast-host" aria-live="polite"></div>
+
+<noscript><p class="noscript">Mentions' controller needs JavaScript. The daemon keeps working without it.</p></noscript>
+
+<script type="module" src="/assets/js/main.js"></script>
 </body>
 </html>

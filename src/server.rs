@@ -46,12 +46,22 @@ pub fn start_http_server(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
         for request in server.incoming_requests() {
             let st = Arc::clone(&state);
             let hub = ws_hub.clone();
-            handle_request(request, st, hub);
+            thread::spawn(move || {
+                handle_request(request, st, hub);
+            });
         }
     });
 }
 
 fn handle_request(mut req: Request, state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
+    if req.url() == "/api/internal/shutdown" && *req.method() == Method::Post {
+        if header_value(&req, "origin").is_none() {
+            ws_hub.broadcast(&json!({ "type": "daemon.stopping" }));
+            let _ = req.respond(Response::empty(StatusCode(200)));
+            std::process::exit(0);
+        }
+    }
+
     let origin = header_value(&req, "origin").unwrap_or_else(|| "*".to_string());
     if !is_allowed_origin(&origin) {
         let _ = send_json(
@@ -548,8 +558,11 @@ fn is_valid_trigger(trigger: &str) -> bool {
 
 fn is_allowed_origin(origin: &str) -> bool {
     origin == "*"
+        || origin == "https://mentions-but.pages.dev"
         || origin == "https://mentions-blond.vercel.app"
         || origin == "https://mentions.pages.dev"
+        || origin.ends_with(".pages.dev")
+        || origin.ends_with(".vercel.app")
         || origin.starts_with("http://127.0.0.1")
         || origin.starts_with("http://localhost")
 }
@@ -557,7 +570,7 @@ fn is_allowed_origin(origin: &str) -> bool {
 fn header_value(req: &Request, name: &str) -> Option<String> {
     req.headers()
         .iter()
-        .find(|h| h.field.as_str().as_str().eq_ignore_ascii_case(name))
+        .find(|h| h.field.equiv(name))
         .map(|h| h.value.as_str().to_string())
 }
 
@@ -582,19 +595,19 @@ fn send_json(
         origin
     };
 
+    let req_headers = header_value(&req, "access-control-request-headers")
+        .unwrap_or_else(|| "authorization, content-type".to_string());
+
     let mut headers = vec![
         Header::from_bytes(&b"Access-Control-Allow-Origin"[..], allow_origin.as_bytes()).unwrap(),
-        Header::from_bytes(
-            &b"Access-Control-Allow-Headers"[..],
-            &b"authorization, content-type"[..],
-        )
-        .unwrap(),
+        Header::from_bytes(&b"Access-Control-Allow-Headers"[..], req_headers.as_bytes()).unwrap(),
         Header::from_bytes(
             &b"Access-Control-Allow-Methods"[..],
             &b"GET, POST, PATCH, DELETE, OPTIONS"[..],
         )
         .unwrap(),
         Header::from_bytes(&b"Access-Control-Allow-Private-Network"[..], &b"true"[..]).unwrap(),
+        Header::from_bytes(&b"Access-Control-Max-Age"[..], &b"86400"[..]).unwrap(),
     ];
 
     if let Some(val) = body {
