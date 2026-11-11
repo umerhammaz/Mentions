@@ -1,0 +1,98 @@
+{
+  "v": 2,
+  "id": "zc_mwbuokxl_p917",
+  "sid": "s_mwbuick0_8lf6",
+  "repo": "umerhammaz/mentions",
+  "ts": 1794385308079,
+  "sha": "adbcb60610ac1677859ce41ea8002b8f17410dc7",
+  "branch": "main",
+  "delivery": "direct",
+  "msgSubj": "feat(sync): Synchronized 8 file(s) across 1 prompt turn(s)",
+  "msgHash": "88abc0681a3e33ae",
+  "files": [
+    [
+      ".github/workflows/release.yml",
+      "a",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "build.rs",
+      "a",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/app.manifest",
+      "a",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "src/hook.rs",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "src/tray.rs",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "src/server.rs",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/js/api.js",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/js/main.js",
+      "m",
+      "ai",
+      1,
+      0
+    ]
+  ],
+  "sum": {
+    "files": 8,
+    "add": 3,
+    "mod": 5,
+    "del": 0,
+    "src": {
+      "ai": 8
+    }
+  },
+  "warn": {
+    "quarantine": 0,
+    "halluc": 0,
+    "secret": 0,
+    "runtime": 0,
+    "override": false
+  },
+  "safety": {
+    "canary": "8/8",
+    "vault": "persistent"
+  },
+  "base": {
+    "gen": 1,
+    "anc": "T",
+    "race": 0
+  },
+  "verify": 1,
+  "ms": 7725,
+  "hash": "d089d904def096c1"
+}
