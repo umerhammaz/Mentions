@@ -1,5 +1,4 @@
 import { h, useIcon } from "./dom.js";
-import { state, on } from "./store.js";
 import { formatDate, formatNum, truncate } from "./a11y.js";
 
 export function renderChip(health) {
@@ -8,13 +7,14 @@ export function renderChip(health) {
   host.replaceChildren(chipFor(health));
 }
 
-function chipFor(health) {
-  const s = health?.state || "unknown";
+function chipFor(hState) {
+  const s = hState?.state || "unknown";
   const labelMap = {
     unknown: "Checking...",
     connecting: "Checking...",
     online: "Daemon online",
     paused: "Expansion paused",
+    demo: "Demo mode",
     offline: "Daemon offline",
     unpaired: "Not paired",
     "version-mismatch": "Update required",
@@ -22,6 +22,7 @@ function chipFor(health) {
   const toneMap = {
     online: "success",
     paused: "warning",
+    demo: "info",
     offline: "danger",
     unpaired: "warning",
     "version-mismatch": "danger",
@@ -56,10 +57,13 @@ export function clearBanners() {
 }
 
 export function field({ id, label, help, control, error, required = false, optional = false }) {
+  const target = control?.matches?.("input, textarea, select")
+    ? control
+    : control?.querySelector?.("input, textarea, select") || control;
   const describedby = [help && `${id}-help`, error && `${id}-err`].filter(Boolean).join(" ") || null;
-  if (control && describedby) control.setAttribute("aria-describedby", describedby);
-  if (control && required) control.setAttribute("required", "");
-  if (control && error) control.setAttribute("aria-invalid", "true");
+  if (target && describedby) target.setAttribute("aria-describedby", describedby);
+  if (target && required) target.setAttribute("required", "");
+  if (target && error) target.setAttribute("aria-invalid", "true");
   return h("div", { class: "field" },
     h("label", { class: "field__label", for: id },
       label,
@@ -81,29 +85,39 @@ export function iconButton(iconId, label, onClick) {
 }
 
 export function overflowMenu(items) {
-  return h("div", { style: { position: "relative", display: "inline-block" } }, (() => {
+  return h("div", { style: { position: "relative", display: "inline-block" }, onClick: (e) => e.stopPropagation() }, (() => {
     const trigger = h("button", {
       class: "icon-btn",
       type: "button",
       "aria-haspopup": "menu",
       "aria-expanded": "false",
       "aria-label": "More actions",
+      title: "More actions",
     }, useIcon("more"));
     let menu = null;
     function close() {
-      if (menu) { menu.remove(); menu = null; trigger.setAttribute("aria-expanded", "false"); document.removeEventListener("pointerdown", onDoc); }
+      if (menu) {
+        menu.remove();
+        menu = null;
+        trigger.setAttribute("aria-expanded", "false");
+        document.removeEventListener("pointerdown", onDoc);
+      }
     }
-    function onDoc(e) { if (!menu?.contains(e.target) && e.target !== trigger) close(); }
-    trigger.addEventListener("click", () => {
+    function onDoc(e) {
+      if (!menu?.contains(e.target) && !trigger.contains(e.target)) close();
+    }
+    trigger.addEventListener("click", (e) => {
+      e.stopPropagation();
       if (menu) return close();
-      menu = h("div", { class: "menu", role: "menu" },
+      menu = h("div", { class: "menu", role: "menu", onClick: (ev) => ev.stopPropagation() },
         ...items.map((it) => h("button", {
           type: "button",
           role: "menuitem",
           disabled: it.disabled ? true : null,
           "aria-disabled": it.disabled ? "true" : null,
           "data-danger": it.danger ? "true" : null,
-          onClick: () => {
+          onClick: (ev) => {
+            ev.stopPropagation();
             if (it.disabled) return;
             close();
             it.onSelect();
@@ -112,11 +126,26 @@ export function overflowMenu(items) {
       );
       trigger.parentElement.append(menu);
       trigger.setAttribute("aria-expanded", "true");
-      const first = menu.querySelector("button");
-      first?.focus();
+      const enabledBtns = () => Array.from(menu.querySelectorAll("button:not(:disabled)"));
+      enabledBtns()[0]?.focus();
       setTimeout(() => document.addEventListener("pointerdown", onDoc), 0);
-      menu.addEventListener("keydown", (e) => {
-        if (e.key === "Escape") { e.preventDefault(); close(); trigger.focus(); }
+      menu.addEventListener("keydown", (ev) => {
+        if (ev.key === "Escape") {
+          ev.preventDefault();
+          close();
+          trigger.focus();
+          return;
+        }
+        const list = enabledBtns();
+        if (!list.length) return;
+        const idx = list.indexOf(document.activeElement);
+        if (ev.key === "ArrowDown") {
+          ev.preventDefault();
+          list[(idx + 1) % list.length].focus();
+        } else if (ev.key === "ArrowUp") {
+          ev.preventDefault();
+          list[(idx - 1 + list.length) % list.length].focus();
+        }
       });
     });
     return trigger;
@@ -135,9 +164,14 @@ export function confirmDialog({ title, body, confirmLabel = "Confirm", danger = 
     )
   );
   dlg.returnValue = "";
-  dlg.showModal();
+  if (!dlg.open) dlg.showModal();
+  const onBackdrop = (e) => {
+    if (e.target === dlg) dlg.close("cancel");
+  };
+  dlg.addEventListener("click", onBackdrop);
   dlg.addEventListener("close", function onClose() {
     dlg.removeEventListener("close", onClose);
+    dlg.removeEventListener("click", onBackdrop);
     if (dlg.returnValue === "confirm") onConfirm?.();
   }, { once: true });
 }

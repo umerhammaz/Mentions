@@ -1,22 +1,20 @@
-import { h } from "../dom.js";
+import { h, useIcon } from "../dom.js";
 import { state, set, emit } from "../store.js";
 import { request, ApiError } from "../api.js";
 import { navigate } from "../router.js";
-import { field, primaryButton, toast, truncate } from "../ui.js";
+import { field, primaryButton, confirmDialog, toast, truncate } from "../ui.js";
 import { focusFirstInvalid, announce } from "../a11y.js";
-import { useIcon } from "../dom.js";
 
 const TRIGGER_RE = /^@[a-z0-9_-]{1,31}$/;
 const MAX_TEXT = 65536;
 
 function normalizeTrigger(raw) {
-  const cleaned = String(raw || "").trim().replace(/^@+/, "");
+  const cleaned = String(raw || "").trim().replace(/^@+/, "").toLowerCase();
   return cleaned ? `@${cleaned}` : "@";
 }
 
 export async function renderEditor({ root, params }, { mode }) {
   const isNew = mode === "new";
-  const isDesktop = matchMedia("(min-width: 960px)").matches;
   const container = h("section", { class: "editor", "aria-labelledby": "editor-h" });
   root.replaceChildren(container);
 
@@ -27,7 +25,17 @@ export async function renderEditor({ root, params }, { mode }) {
     } catch {}
   }
 
-  const existing = !isNew ? state.commands.find((c) => c.id === params.id) : null;
+  let existing = !isNew ? state.commands.find((c) => c.id === params.id) : null;
+  if (!isNew && !existing) {
+    try {
+      const fetched = await request(`/api/commands/${encodeURIComponent(params.id)}`);
+      if (fetched?.id) {
+        existing = fetched;
+        set("commands", [...state.commands.filter((c) => c.id !== fetched.id), fetched]);
+      }
+    } catch {}
+  }
+
   if (!isNew && !existing) {
     container.replaceChildren(
       h("h1", { id: "editor-h", class: "t-title" }, "Command not found"),
@@ -156,6 +164,12 @@ export async function renderEditor({ root, params }, { mode }) {
     field({ id: "group", label: "Group", help: "Optional. Groups commands in the list.", optional: true, control: groupInput }),
     h("div", null, enabledSwitch),
     h("div", { class: "editor__actions" },
+      !isNew ? h("button", {
+        class: "btn btn--quiet",
+        type: "button",
+        style: { color: "var(--danger)", marginInlineEnd: "auto" },
+        onClick: onDelete,
+      }, "Delete command") : null,
       h("a", { class: "btn btn--quiet", href: "/" }, "Cancel"),
       submitBtn
     )
@@ -163,7 +177,7 @@ export async function renderEditor({ root, params }, { mode }) {
 
   const head = h("header", { class: "editor__head" },
     h("h1", { id: "editor-h", class: "t-title" }, heading),
-    isDesktop ? null : h("a", { class: "btn btn--quiet", href: "/" }, "Back")
+    h("a", { class: "btn btn--quiet", href: "/" }, "Back to Commands")
   );
 
   const grid = h("div", { class: "editor__grid" },
@@ -227,6 +241,51 @@ export async function renderEditor({ root, params }, { mode }) {
     return null;
   }
 
+  function onDelete() {
+    if (!existing) return;
+    confirmDialog({
+      title: `Delete ${existing.trigger}?`,
+      body: "It will stop expanding immediately. You can undo this for a few seconds afterwards.",
+      confirmLabel: "Delete command",
+      danger: true,
+      onConfirm: async () => {
+        try {
+          await request(`/api/commands/${encodeURIComponent(existing.id)}`, { method: "DELETE" });
+          const snapshot = existing;
+          set("ui", { ...state.ui, dirty: false });
+          set("commands", state.commands.filter((c) => c.id !== existing.id));
+          emit("commands:changed");
+          toast({
+            message: `Deleted ${snapshot.trigger}`,
+            actionLabel: "Undo",
+            onAction: async () => {
+              try {
+                const restored = await request("/api/commands", {
+                  method: "POST",
+                  body: {
+                    trigger: snapshot.trigger,
+                    text: snapshot.text,
+                    enabled: snapshot.enabled,
+                    ...(snapshot.group ? { group: snapshot.group } : {}),
+                  },
+                });
+                if (restored && !state.commands.some((x) => x.id === restored.id)) {
+                  set("commands", [...state.commands, restored]);
+                }
+                emit("commands:reload");
+                emit("commands:changed");
+              } catch {}
+            },
+          });
+          announce(`Deleted ${snapshot.trigger}`);
+          navigate("/");
+        } catch {
+          toast({ message: "Couldn't delete command." });
+        }
+      },
+    });
+  }
+
   async function onSubmit(e) {
     e.preventDefault();
     const tErr = triggerError();
@@ -241,15 +300,28 @@ export async function renderEditor({ root, params }, { mode }) {
     const original = submitBtn.textContent;
     submitBtn.textContent = "Saving...";
     try {
-      const body = { trigger: normalizeTrigger(draft.trigger), text: draft.text, enabled: draft.enabled };
-      if (draft.group.trim()) body.group = draft.group.trim();
+      const trimmedGroup = draft.group.trim();
+      const body = {
+        trigger: normalizeTrigger(draft.trigger),
+        text: draft.text,
+        enabled: draft.enabled,
+        ...(isNew ? (trimmedGroup ? { group: trimmedGroup } : {}) : { group: trimmedGroup }),
+      };
+      let saved = null;
       if (isNew) {
-        await request("/api/commands", { method: "POST", body });
+        saved = await request("/api/commands", { method: "POST", body });
+        if (saved && !state.commands.some((c) => c.id === saved.id)) {
+          set("commands", [...state.commands, saved]);
+        }
       } else {
-        await request(`/api/commands/${existing.id}`, { method: "PATCH", body });
+        saved = await request(`/api/commands/${encodeURIComponent(existing.id)}`, { method: "PATCH", body });
+        if (saved) {
+          set("commands", state.commands.map((c) => c.id === existing.id ? saved : c));
+        }
       }
       set("ui", { ...state.ui, dirty: false });
-      emit("commands:reload");
+      emit("commands:changed");
+      toast({ message: isNew ? `Created ${body.trigger}` : `Saved ${body.trigger}` });
       announce(isNew ? "Command created." : "Command saved.");
       navigate("/");
     } catch (err) {

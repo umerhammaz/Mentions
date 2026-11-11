@@ -1,8 +1,8 @@
 import { h } from "../dom.js";
-import { state, set, on as onState, tokenClear } from "../store.js";
-import { request, ApiError } from "../api.js";
-import { route } from "../router.js";
-import { field, primaryButton, toast, confirmDialog } from "../ui.js";
+import { state, set, tokenClear } from "../store.js";
+import { request, ApiError, isDemoMode } from "../api.js";
+import { route, navigate } from "../router.js";
+import { toast, confirmDialog } from "../ui.js";
 import { announce, formatDate } from "../a11y.js";
 
 const screen = {
@@ -45,7 +45,24 @@ const screen = {
       }
     }
 
-    section("connection", "Connection", (status) => [
+    function toggleSwitch(initialChecked, onToggle) {
+      const stateLabel = h("span", { class: "t-caption" }, initialChecked ? "On" : "Off");
+      return h("label", { class: "switch" },
+        h("input", {
+          type: "checkbox",
+          checked: initialChecked,
+          onchange: (e) => {
+            const checked = e.target.checked;
+            stateLabel.textContent = checked ? "On" : "Off";
+            onToggle(checked);
+          },
+        }),
+        h("span", { class: "switch__track" }),
+        stateLabel
+      );
+    }
+
+    section("connection", "Connection", () => [
       h("div", { class: "settings__row" },
         h("div", { class: "settings__row-text" },
           h("span", { class: "t-body" }, "Daemon port"),
@@ -81,11 +98,10 @@ const screen = {
           h("span", { class: "t-body" }, "Restore clipboard after paste"),
           h("span", { class: "t-caption" }, "Puts your previous clipboard content back after expanding.")
         ),
-        h("label", { class: "switch" },
-          h("input", { type: "checkbox", checked: settings.restoreClipboard, onchange: (e) => { settings.restoreClipboard = e.target.checked; save({ restoreClipboard: e.target.checked }, "expansion", status); } }),
-          h("span", { class: "switch__track" }),
-          h("span", { class: "t-caption" }, settings.restoreClipboard ? "On" : "Off")
-        )
+        toggleSwitch(settings.restoreClipboard, (checked) => {
+          settings.restoreClipboard = checked;
+          save({ restoreClipboard: checked }, "expansion", status);
+        })
       )
     ]);
 
@@ -95,11 +111,10 @@ const screen = {
           h("span", { class: "t-body" }, "Launch Mentions when I sign in"),
           h("span", { class: "t-caption" }, "Starts the daemon at login so expansions always work.")
         ),
-        h("label", { class: "switch" },
-          h("input", { type: "checkbox", checked: settings.autostart, onchange: (e) => { settings.autostart = e.target.checked; save({ autostart: e.target.checked }, "startup", status); } }),
-          h("span", { class: "switch__track" }),
-          h("span", { class: "t-caption" }, settings.autostart ? "On" : "Off")
-        )
+        toggleSwitch(settings.autostart, (checked) => {
+          settings.autostart = checked;
+          save({ autostart: checked }, "startup", status);
+        })
       )
     ]);
 
@@ -109,11 +124,10 @@ const screen = {
           h("span", { class: "t-body" }, "Show match counts"),
           h("span", { class: "t-caption" }, "Off by default. Counts are local and never uploaded.")
         ),
-        h("label", { class: "switch" },
-          h("input", { type: "checkbox", checked: settings.statsEnabled, onchange: (e) => { settings.statsEnabled = e.target.checked; save({ statsEnabled: e.target.checked }, "privacy", status); } }),
-          h("span", { class: "switch__track" }),
-          h("span", { class: "t-caption" }, settings.statsEnabled ? "On" : "Off")
-        )
+        toggleSwitch(settings.statsEnabled, (checked) => {
+          settings.statsEnabled = checked;
+          save({ statsEnabled: checked }, "privacy", status);
+        })
       ),
       h("p", { class: "t-caption" },
         "Commands are stored on this machine at ",
@@ -122,17 +136,27 @@ const screen = {
       )
     ]);
 
+    const importFileInput = h("input", { id: "import-file", type: "file", accept: "application/json", hidden: true, onchange: onImport });
+
     section("data", "Data", () => [
       h("div", { style: { display: "flex", gap: "var(--space-2)", flexWrap: "wrap" } },
         h("button", { class: "btn", type: "button", onClick: exportJSON }, "Export commands"),
-        h("button", { class: "btn", type: "button", onClick: () => document.getElementById("import-file")?.click() }, "Import commands"),
-        h("input", { id: "import-file", type: "file", accept: "application/json", hidden: true, onchange: onImport })
+        h("button", { class: "btn", type: "button", onClick: () => importFileInput.click() }, "Import commands"),
+        importFileInput
       )
     ]);
 
     section("pairing", "Paired browsers", () => [
-      h("p", { class: "t-body" }, "This browser is paired. To un-pair, use the Mentions tray menu or revoke all below."),
-      h("button", { class: "btn btn--quiet", type: "button", onClick: revokeAll }, "Revoke all browsers")
+      h("p", { class: "t-body" },
+        isDemoMode()
+          ? "Currently running in browser demo mode. Pair with a local daemon to sync and expand commands."
+          : "This browser is paired. To un-pair, use the Mentions tray menu or revoke all below."
+      ),
+      h("div", { style: { display: "flex", gap: "var(--space-2)", flexWrap: "wrap" } },
+        isDemoMode()
+          ? h("a", { class: "btn btn--primary", href: "/pair" }, "Pair with daemon")
+          : h("button", { class: "btn btn--quiet", type: "button", onClick: revokeAll }, "Revoke all browsers")
+      )
     ]);
 
     section("diagnostics", "Diagnostics", () => [
@@ -156,7 +180,7 @@ const screen = {
 
     async function testConnection() {
       try {
-        await request("/api/health", { auth: false, timeout: 1500 });
+        await request("/api/health", { auth: false, timeout: 1500, allowDemo: false });
         toast({ message: "Daemon responded." });
       } catch { toast({ message: "Daemon didn't respond." }); }
     }
@@ -180,6 +204,8 @@ const screen = {
         const text = await file.text();
         const bundle = JSON.parse(text);
         await request("/api/commands/import", { method: "POST", body: bundle });
+        const updated = await request("/api/commands");
+        if (Array.isArray(updated?.commands)) set("commands", updated.commands);
         toast({ message: "Commands imported." });
         announce("Commands imported.");
       } catch { toast({ message: "Import failed — file didn't validate." }); }
@@ -194,7 +220,7 @@ const screen = {
         onConfirm: async () => {
           try { await request("/api/pair/revoke-all", { method: "POST" }); } catch {}
           tokenClear(location.origin);
-          location.href = "/pair";
+          navigate("/pair");
         },
       });
     }

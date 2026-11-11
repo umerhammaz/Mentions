@@ -21,7 +21,8 @@ function nextUniqueTrigger(baseTrigger, commands) {
 const routeScreen = {
   title: "Commands",
   async mount({ root }) {
-    const isDesktop = matchMedia("(min-width: 960px)").matches;
+    const mq = matchMedia("(min-width: 960px)");
+    let isDesktop = mq.matches;
     const container = h("section", { class: "cmds", "aria-labelledby": "cmds-h" });
     const headSlot = h("div");
     const filterSlot = h("div", { class: "cmds__filter" });
@@ -40,7 +41,9 @@ const routeScreen = {
           const text = await file.text();
           const bundle = JSON.parse(text);
           await request("/api/commands/import", { method: "POST", body: bundle });
-          emit("commands:reload");
+          const data = await request("/api/commands");
+          if (Array.isArray(data?.commands)) set("commands", data.commands);
+          rerender();
           toast({ message: "Commands imported." });
           announce("Commands imported.");
         } catch {
@@ -55,16 +58,25 @@ const routeScreen = {
     let filterInputEl = null;
 
     function isOffline() {
-      return state.health?.state !== "online" && state.health?.state !== "paused";
+      const s = state.health?.state;
+      return s !== "online" && s !== "paused" && s !== "demo";
     }
 
     function renderHead() {
       const offline = isOffline();
       return h("div", { class: "cmds__head" },
         h("h1", { id: "cmds-h", class: "t-title" }, "Commands"),
-        offline
-          ? h("button", { class: "btn btn--primary", type: "button", disabled: true, "aria-disabled": "true", title: "Daemon is offline" }, "Create command")
-          : h("a", { class: "btn btn--primary", href: "/commands/new" }, "Create command")
+        h("div", { style: { display: "flex", gap: "var(--space-2)", alignItems: "center", flexWrap: "wrap" } },
+          h("button", {
+            class: "btn btn--quiet",
+            type: "button",
+            disabled: offline ? true : null,
+            onClick: () => importInput.click(),
+          }, "Import JSON"),
+          offline
+            ? h("button", { class: "btn btn--primary", type: "button", disabled: true, "aria-disabled": "true", title: "Daemon is offline" }, "Create command")
+            : h("a", { class: "btn btn--primary", href: "/commands/new" }, "Create command")
+        )
       );
     }
 
@@ -76,7 +88,7 @@ const routeScreen = {
     }
 
     function syncFilterSlot() {
-      const shouldShow = state.commands.length > 8 || Boolean(state.ui.filter);
+      const shouldShow = state.commands.length > 0 || Boolean(state.ui.filter);
       if (!shouldShow) {
         filterSlot.replaceChildren();
         filterInputEl = null;
@@ -87,7 +99,7 @@ const routeScreen = {
           id: "filter",
           class: "input",
           type: "search",
-          placeholder: "Search trigger or text",
+          placeholder: "Search trigger, text, or group",
           value: state.ui.filter || "",
           oninput: (e) => {
             set("ui", { ...state.ui, filter: e.target.value });
@@ -122,7 +134,11 @@ const routeScreen = {
       const desc = state.ui.sort === "-trigger";
       const filtered = state.commands.filter((c) => {
         if (!filter) return true;
-        return c.trigger.toLowerCase().includes(filter) || c.text.toLowerCase().includes(filter);
+        return (
+          c.trigger.toLowerCase().includes(filter) ||
+          c.text.toLowerCase().includes(filter) ||
+          (c.group || "").toLowerCase().includes(filter)
+        );
       }).sort((a, b) => desc ? b.trigger.localeCompare(a.trigger) : a.trigger.localeCompare(b.trigger));
 
       if (filtered.length === 0 && state.commands.length > 0) {
@@ -132,6 +148,43 @@ const routeScreen = {
 
       const offline = isOffline();
       return isDesktop ? buildTable(filtered, offline) : buildRows(filtered, offline);
+    }
+
+    async function toggleCommandEnabled(c) {
+      if (isOffline()) return;
+      const nextEnabled = !c.enabled;
+      try {
+        const updated = await request(`/api/commands/${c.id}`, {
+          method: "PATCH",
+          body: { enabled: nextEnabled },
+        });
+        set("commands", state.commands.map((item) => item.id === c.id ? (updated || { ...item, enabled: nextEnabled }) : item));
+        rerender();
+        toast({ message: `${c.trigger} ${nextEnabled ? "enabled" : "paused"}` });
+        announce(`${c.trigger} ${nextEnabled ? "enabled" : "paused"}`);
+      } catch {
+        toast({ message: "Couldn't update command status" });
+      }
+    }
+
+    async function duplicateCommand(c) {
+      try {
+        const copy = {
+          trigger: nextUniqueTrigger(c.trigger, state.commands),
+          text: c.text,
+          enabled: c.enabled,
+          ...(c.group ? { group: c.group } : {}),
+        };
+        const created = await request("/api/commands", { method: "POST", body: copy });
+        if (created && !state.commands.some((x) => x.id === created.id)) {
+          set("commands", [...state.commands, created]);
+        }
+        emit("commands:reload");
+        rerender();
+        toast({ message: `Duplicated as ${copy.trigger}` });
+      } catch {
+        toast({ message: "Couldn't duplicate command" });
+      }
     }
 
     function buildTable(items, offline) {
@@ -150,7 +203,7 @@ const routeScreen = {
           ),
           h("th", { scope: "col" }, "Pastes"),
           h("th", { scope: "col" }, "Status"),
-          h("th", { scope: "col" }, h("span", { class: "sr-only" }, "Actions"))
+          h("th", { scope: "col", style: { textAlign: "end" } }, "Actions")
         )),
         h("tbody")
       );
@@ -163,8 +216,9 @@ const routeScreen = {
       tbody.addEventListener("click", (e) => {
         const row = e.target.closest("tr[data-key]");
         if (!row) return;
-        if (e.target.closest("button, a")) return;
-        navigate(`/commands/${row.dataset.key}`);
+        if (e.target.closest("button, a, .menu")) return;
+        if (offline) return;
+        navigate(`/commands/${encodeURIComponent(row.dataset.key)}`);
       });
       return table;
     }
@@ -182,44 +236,70 @@ const routeScreen = {
             }
           },
         },
-        { label: "Edit", disabled: offline, onSelect: () => navigate(`/commands/${c.id}`) },
+        { label: "Edit", disabled: offline, onSelect: () => navigate(`/commands/${encodeURIComponent(c.id)}`) },
+        {
+          label: c.enabled ? "Pause command" : "Enable command",
+          disabled: offline,
+          onSelect: () => toggleCommandEnabled(c),
+        },
         {
           label: "Duplicate",
           disabled: offline,
-          onSelect: async () => {
-            try {
-              const copy = {
-                trigger: nextUniqueTrigger(c.trigger, state.commands),
-                text: c.text,
-                enabled: c.enabled,
-                group: c.group,
-              };
-              await request("/api/commands", { method: "POST", body: copy });
-              emit("commands:reload");
-              toast({ message: `Duplicated as ${copy.trigger}` });
-            } catch {
-              toast({ message: "Couldn't duplicate command" });
-            }
-          },
+          onSelect: () => duplicateCommand(c),
         },
         { label: "Delete", danger: true, disabled: offline, onSelect: () => confirmDelete(c) },
       ];
     }
 
     function buildRow(c, offline, tag) {
-      return h(tag, { "data-key": c.id, tabindex: "-1" },
+      const editHref = `/commands/${encodeURIComponent(c.id)}`;
+      return h(tag, { "data-key": c.id, style: offline ? null : { cursor: "pointer" } },
         h("td", null,
           h("div", { class: "table__trigger" },
-            h("span", { class: "code-token" }, c.trigger),
+            h("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" } },
+              offline
+                ? h("span", { class: "code-token" }, c.trigger)
+                : h("a", { href: editHref, class: "code-token", style: { textDecoration: "none" } }, c.trigger),
+              c.group ? h("span", { class: "chip", style: { padding: "1px 8px", fontSize: "var(--fs-caption)" } }, c.group) : null
+            ),
             h("span", { class: "table__preview" }, truncate(c.text, 60))
           )
         ),
         h("td", null, h("span", { class: "t-caption" }, `${formatNum(c.text.length)} chars`)),
-        h("td", null, h("span", { class: "table__status" },
-          h("span", { "aria-hidden": "true", style: { width: "8px", height: "8px", borderRadius: "50%", background: c.enabled ? "var(--success)" : "var(--on-surface-variant)" } }),
-          c.enabled ? "Enabled" : "Paused"
-        )),
-        h("td", { class: "table__actions" }, overflowMenu(rowMenuItems(c, offline)))
+        h("td", null,
+          h("button", {
+            type: "button",
+            class: "btn btn--quiet table__status",
+            disabled: offline ? true : null,
+            title: offline ? "Daemon is offline" : (c.enabled ? "Click to pause command" : "Click to enable command"),
+            onClick: (e) => {
+              e.stopPropagation();
+              toggleCommandEnabled(c);
+            },
+            style: { height: "28px", paddingInline: "var(--space-2)" },
+          },
+            h("span", { "aria-hidden": "true", style: { width: "8px", height: "8px", borderRadius: "50%", background: c.enabled ? "var(--success)" : "var(--on-surface-variant)" } }),
+            c.enabled ? "Enabled" : "Paused"
+          )
+        ),
+        h("td", { class: "table__actions" },
+          h("div", { style: { display: "inline-flex", alignItems: "center", gap: "var(--space-1)", justifyContent: "flex-end" } },
+            offline
+              ? h("button", { class: "btn btn--quiet", type: "button", disabled: true, style: { height: "30px", paddingInline: "var(--space-2)" } }, "Edit")
+              : h("a", { class: "btn btn--quiet", href: editHref, style: { height: "30px", paddingInline: "var(--space-2)", textDecoration: "none" } }, "Edit"),
+            h("button", {
+              class: "btn btn--quiet",
+              type: "button",
+              disabled: offline ? true : null,
+              style: { height: "30px", paddingInline: "var(--space-2)", color: "var(--danger)" },
+              onClick: (e) => {
+                e.stopPropagation();
+                confirmDelete(c);
+              },
+            }, "Delete"),
+            overflowMenu(rowMenuItems(c, offline))
+          )
+        )
       );
     }
 
@@ -227,18 +307,45 @@ const routeScreen = {
       const list = h("ul", { class: "rows", role: "list" });
       patchList(list, items, {
         key: (c) => c.id,
-        create: (c) => h("li", { "data-key": c.id },
-          h("div", { class: "row" },
-            h("div", { class: "row__body" },
-              h("div", { class: "row__trigger" },
-                h("span", { class: "code-token" }, c.trigger),
-                h("span", { class: "t-caption" }, c.enabled ? "Enabled" : "Paused")
+        create: (c) => {
+          const editHref = `/commands/${encodeURIComponent(c.id)}`;
+          return h("li", { "data-key": c.id },
+            h("div", {
+              class: "row",
+              style: offline ? null : { cursor: "pointer" },
+              onClick: (e) => {
+                if (e.target.closest("button, a, .menu")) return;
+                if (!offline) navigate(editHref);
+              },
+            },
+              h("div", { class: "row__body" },
+                h("div", { class: "row__trigger", style: { flexWrap: "wrap" } },
+                  offline
+                    ? h("span", { class: "code-token" }, c.trigger)
+                    : h("a", { href: editHref, class: "code-token", style: { textDecoration: "none" } }, c.trigger),
+                  c.group ? h("span", { class: "chip", style: { padding: "1px 8px", fontSize: "var(--fs-caption)" } }, c.group) : null,
+                  h("button", {
+                    type: "button",
+                    class: "btn btn--quiet t-caption",
+                    disabled: offline ? true : null,
+                    style: { height: "24px", paddingInline: "var(--space-2)" },
+                    onClick: (e) => {
+                      e.stopPropagation();
+                      toggleCommandEnabled(c);
+                    },
+                  }, c.enabled ? "Enabled" : "Paused")
+                ),
+                h("div", { class: "row__preview" }, truncate(c.text, 48))
               ),
-              h("div", { class: "row__preview" }, truncate(c.text, 48))
-            ),
-            overflowMenu(rowMenuItems(c, offline))
-          )
-        ),
+              h("div", { style: { display: "inline-flex", alignItems: "center", gap: "var(--space-1)" } },
+                offline
+                  ? null
+                  : h("a", { class: "btn btn--quiet", href: editHref, style: { height: "30px", paddingInline: "var(--space-2)", textDecoration: "none" } }, "Edit"),
+                overflowMenu(rowMenuItems(c, offline))
+              )
+            )
+          );
+        },
         update: (el, c) => { el.replaceWith(buildRows([c], offline).firstChild); },
       });
       return list;
@@ -252,17 +359,29 @@ const routeScreen = {
         danger: true,
         onConfirm: async () => {
           try {
-            await request(`/api/commands/${c.id}`, { method: "DELETE" });
+            await request(`/api/commands/${encodeURIComponent(c.id)}`, { method: "DELETE" });
             const snapshot = c;
             set("commands", state.commands.filter((x) => x.id !== c.id));
-            emit("commands:changed");
+            rerender();
             toast({
               message: `Deleted ${c.trigger}`,
               actionLabel: "Undo",
               onAction: async () => {
                 try {
-                  await request("/api/commands", { method: "POST", body: { trigger: snapshot.trigger, text: snapshot.text, enabled: snapshot.enabled, group: snapshot.group } });
+                  const restored = await request("/api/commands", {
+                    method: "POST",
+                    body: {
+                      trigger: snapshot.trigger,
+                      text: snapshot.text,
+                      enabled: snapshot.enabled,
+                      ...(snapshot.group ? { group: snapshot.group } : {}),
+                    },
+                  });
+                  if (restored && !state.commands.some((x) => x.id === restored.id)) {
+                    set("commands", [...state.commands, restored]);
+                  }
                   emit("commands:reload");
+                  emit("commands:changed");
                 } catch {}
               },
             });
@@ -285,6 +404,12 @@ const routeScreen = {
       updateResultsOnly();
     }
 
+    const onMediaChange = (e) => {
+      isDesktop = e.matches;
+      updateResultsOnly();
+    };
+    mq.addEventListener("change", onMediaChange);
+
     const unsubs = [
       onState("commands:changed", rerender),
       onState("commands:reload", async () => {
@@ -301,13 +426,16 @@ const routeScreen = {
 
     try {
       const data = await request("/api/commands");
-      set("commands", data?.commands || []);
-      rerender();
+      if (Array.isArray(data?.commands)) {
+        set("commands", data.commands);
+        rerender();
+      }
     } catch {}
 
     return {
       title: "Commands",
       unmount() {
+        mq.removeEventListener("change", onMediaChange);
         for (const off of unsubs) off();
       },
     };
