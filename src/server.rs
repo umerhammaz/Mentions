@@ -79,6 +79,11 @@ fn handle_request(mut req: Request, state: Arc<Mutex<AppState>>, ws_hub: WsHub) 
         return;
     }
 
+    if *req.method() == Method::Get && !path.starts_with("/api/") {
+        serve_embedded_ui(req, path);
+        return;
+    }
+
     if path == "/api/health" && *req.method() == Method::Get {
         let s = state.lock().unwrap();
         let _ = send_json(
@@ -615,6 +620,59 @@ fn send_json(
         );
         req.respond(resp)
     }
+}
+
+fn serve_embedded_ui(req: Request, path: &str) {
+    let (content_type, bytes): (&[u8], &[u8]) = match path {
+        "/404.html" => (&b"text/html; charset=utf-8"[..], include_bytes!("../404.html")),
+        "/assets/icons.svg" => (&b"image/svg+xml"[..], include_bytes!("../assets/icons.svg")),
+        "/assets/css/tokens.css" => (&b"text/css; charset=utf-8"[..], include_bytes!("../assets/css/tokens.css")),
+        "/assets/css/reset.css" => (&b"text/css; charset=utf-8"[..], include_bytes!("../assets/css/reset.css")),
+        "/assets/css/base.css" => (&b"text/css; charset=utf-8"[..], include_bytes!("../assets/css/base.css")),
+        "/assets/css/layout.css" => (&b"text/css; charset=utf-8"[..], include_bytes!("../assets/css/layout.css")),
+        "/assets/css/components.css" => (&b"text/css; charset=utf-8"[..], include_bytes!("../assets/css/components.css")),
+        "/assets/css/screens.css" => (&b"text/css; charset=utf-8"[..], include_bytes!("../assets/css/screens.css")),
+        "/assets/js/main.js" => (&b"application/javascript; charset=utf-8"[..], include_bytes!("../assets/js/main.js")),
+        "/assets/js/router.js" => (&b"application/javascript; charset=utf-8"[..], include_bytes!("../assets/js/router.js")),
+        "/assets/js/a11y.js" => (&b"application/javascript; charset=utf-8"[..], include_bytes!("../assets/js/a11y.js")),
+        "/assets/js/dom.js" => (&b"application/javascript; charset=utf-8"[..], include_bytes!("../assets/js/dom.js")),
+        "/assets/js/ui.js" => (&b"application/javascript; charset=utf-8"[..], include_bytes!("../assets/js/ui.js")),
+        "/assets/js/api.js" => (&b"application/javascript; charset=utf-8"[..], include_bytes!("../assets/js/api.js")),
+        "/assets/js/ws.js" => (&b"application/javascript; charset=utf-8"[..], include_bytes!("../assets/js/ws.js")),
+        "/assets/js/store.js" => (&b"application/javascript; charset=utf-8"[..], include_bytes!("../assets/js/store.js")),
+        "/assets/js/screens/commands.js" => (&b"application/javascript; charset=utf-8"[..], include_bytes!("../assets/js/screens/commands.js")),
+        "/assets/js/screens/editor.js" => (&b"application/javascript; charset=utf-8"[..], include_bytes!("../assets/js/screens/editor.js")),
+        "/assets/js/screens/notfound.js" => (&b"application/javascript; charset=utf-8"[..], include_bytes!("../assets/js/screens/notfound.js")),
+        "/assets/js/screens/pair.js" => (&b"application/javascript; charset=utf-8"[..], include_bytes!("../assets/js/screens/pair.js")),
+        "/assets/js/screens/settings.js" => (&b"application/javascript; charset=utf-8"[..], include_bytes!("../assets/js/screens/settings.js")),
+        _ if path.starts_with("/assets/") => {
+            let resp = Response::new(
+                StatusCode(404),
+                vec![],
+                std::io::Cursor::new(Vec::new()),
+                Some(0),
+                None,
+            );
+            let _ = req.respond(resp);
+            return;
+        }
+        _ => (&b"text/html; charset=utf-8"[..], include_bytes!("../index.html")),
+    };
+
+    let headers = vec![
+        Header::from_bytes(&b"Content-Type"[..], content_type).unwrap(),
+        Header::from_bytes(&b"X-Content-Type-Options"[..], &b"nosniff"[..]).unwrap(),
+        Header::from_bytes(&b"X-Frame-Options"[..], &b"DENY"[..]).unwrap(),
+    ];
+    let data = bytes.to_vec();
+    let resp = Response::new(
+        StatusCode(200),
+        headers,
+        std::io::Cursor::new(data.clone()),
+        Some(data.len()),
+        None,
+    );
+    let _ = req.respond(resp);
 }
 
 fn compute_ws_accept(key: &str) -> String {

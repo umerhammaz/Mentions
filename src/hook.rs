@@ -1,5 +1,5 @@
 use crate::injector::{self, SELF_STAMP};
-use crate::store::AppState;
+use crate::store::{self as _store, AppState};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;

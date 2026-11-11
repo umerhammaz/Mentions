@@ -44,6 +44,12 @@ function refreshBanner(hh) {
       body: "Mentions may not be running. Commands are shown read-only until the daemon responds.",
       actions: [
         h("button", { class: "btn btn--quiet", type: "button", onClick: () => location.reload() }, "Retry"),
+        h("a", {
+          class: "btn btn--quiet",
+          href: "https://github.com/Zerocommit-dev/Mentions/releases/latest/download/mentions-daemon.exe",
+          target: "_blank",
+          rel: "noopener",
+        }, "Download for Windows"),
         h("a", { class: "btn btn--quiet", href: "/settings#diagnostics" }, "Why?"),
       ],
     });

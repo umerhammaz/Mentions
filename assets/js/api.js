@@ -34,7 +34,9 @@ export function setPort(port) {
 export function getPort() {
   let override = null;
   try { override = sessionStorage.getItem("mentions.port"); } catch {}
-  return validPort(override) || 31415;
+  if (validPort(override)) return validPort(override);
+  if (location.hostname === "127.0.0.1" && validPort(location.port)) return validPort(location.port);
+  return 31415;
 }
 
 export function getBase() {

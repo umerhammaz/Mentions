@@ -1,6 +1,5 @@
-use crate::server::WsHub;
-use crate::store::AppState;
-use crate::CONTROLLER_URL;
+use crate::server::{self as _server, WsHub};
+use crate::store::{self, AppState};
 use serde_json::json;
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -14,6 +13,7 @@ static TRAY_CTX: OnceLock<TrayContext> = OnceLock::new();
 #[cfg(windows)]
 const WM_TRAYICON: u32 = windows_sys::Win32::UI::WindowsAndMessaging::WM_APP + 1;
 const ID_OPEN: usize = 1001;
+const ID_OPEN_LOCAL: usize = 1005;
 const ID_PAIR: usize = 1002;
 const ID_TOGGLE_PAUSE: usize = 1003;
 const ID_QUIT: usize = 1004;
@@ -76,6 +76,7 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
                 let cmd = wparam & 0xFFFF;
                 match cmd {
                     ID_OPEN => launch_controller(),
+                    ID_OPEN_LOCAL => launch_local_controller(),
                     ID_PAIR => launch_pairing(),
                     ID_TOGGLE_PAUSE => toggle_pause(),
                     ID_QUIT => {
@@ -102,7 +103,7 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
         };
         let (paused, code) = {
             let mut s = ctx.state.lock().unwrap();
-            if crate::store::now_secs() > s.pair_expires_at {
+            if store::now_secs() > s.pair_expires_at {
                 s.refresh_pair_code();
             }
             (s.settings.paused, s.pair_code.clone())
@@ -113,7 +114,8 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
             return;
         }
 
-        let open_lbl: Vec<u16> = "Open Mentions Controller\0".encode_utf16().collect();
+        let open_lbl: Vec<u16> = "Open Web Controller\0".encode_utf16().collect();
+        let local_lbl: Vec<u16> = "Open Local Controller (Offline)\0".encode_utf16().collect();
         let pair_lbl: Vec<u16> = format!("Pair Browser (Code: {})\0", code)
             .encode_utf16()
             .collect();
@@ -125,6 +127,7 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
         let quit_lbl: Vec<u16> = "Quit Mentions\0".encode_utf16().collect();
 
         AppendMenuW(menu, MF_STRING, ID_OPEN, open_lbl.as_ptr());
+        AppendMenuW(menu, MF_STRING, ID_OPEN_LOCAL, local_lbl.as_ptr());
         AppendMenuW(menu, MF_STRING, ID_PAIR, pair_lbl.as_ptr());
         AppendMenuW(menu, MF_STRING, ID_TOGGLE_PAUSE, pause_lbl.as_ptr());
         AppendMenuW(menu, MF_SEPARATOR, 0, std::ptr::null());
@@ -146,8 +149,9 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
     }
 
     fn launch_controller() {
+        let base = super::CONTROLLER_URL;
         let Some(ctx) = TRAY_CTX.get() else {
-            open_browser(CONTROLLER_URL);
+            open_browser(base);
             return;
         };
         let (needs_pair, code, port) = {
@@ -156,14 +160,27 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
             (s.tokens.is_empty(), code, s.settings.port)
         };
         if needs_pair {
-            let url = format!("{}/pair?code={}&port={}", CONTROLLER_URL, code, port);
+            let url = format!("{}/pair?code={}&port={}", base, code, port);
             open_browser(&url);
         } else if port != 31415 {
-            let url = format!("{}/?port={}", CONTROLLER_URL, port);
+            let url = format!("{}/?port={}", base, port);
             open_browser(&url);
         } else {
-            open_browser(CONTROLLER_URL);
+            open_browser(base);
         }
+    }
+
+    fn launch_local_controller() {
+        let Some(ctx) = TRAY_CTX.get() else {
+            open_browser("http://127.0.0.1:31415");
+            return;
+        };
+        let (code, port) = {
+            let mut s = ctx.state.lock().unwrap();
+            (s.refresh_pair_code(), s.settings.port)
+        };
+        let url = format!("http://127.0.0.1:{}/pair?code={}&port={}", port, code, port);
+        open_browser(&url);
     }
 
     fn launch_pairing() {
@@ -174,7 +191,7 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
             let mut s = ctx.state.lock().unwrap();
             (s.refresh_pair_code(), s.settings.port)
         };
-        let url = format!("{}/pair?code={}&port={}", CONTROLLER_URL, code, port);
+        let url = format!("{}/pair?code={}&port={}", super::CONTROLLER_URL, code, port);
         open_browser(&url);
     }
 
