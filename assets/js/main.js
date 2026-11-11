@@ -5,11 +5,12 @@ import "./screens/pair.js";
 import "./screens/notfound.js";
 
 import { startRouter } from "./router.js";
-import { healthLoop } from "./api.js";
-import { state, set, on, tokenGet } from "./store.js";
+import { healthLoop, request, DEMO_TOKEN } from "./api.js";
+import { state, set, on, tokenGet, tokenSet } from "./store.js";
 import { connectWS, disconnectWS } from "./ws.js";
 import { renderChip, renderBanner, clearBanners } from "./ui.js";
 import { h } from "./dom.js";
+import { announce } from "./a11y.js";
 
 const root = document.getElementById("main");
 const hookToggle = document.getElementById("hook-toggle");
@@ -18,11 +19,33 @@ const downloadBtn = document.getElementById("download-app");
 hookToggle.addEventListener("click", async () => {
   const paused = !!state.health?.paused;
   try {
-    const mod = await import("./api.js");
-    await mod.request(paused ? "/api/hook/resume" : "/api/hook/pause", { method: "POST" });
-    set("health", { ...state.health, paused: !paused });
+    await request(paused ? "/api/hook/resume" : "/api/hook/pause", { method: "POST" });
+    set("health", { ...state.health, paused: !paused, state: state.health?.state === "demo" ? "demo" : (!paused ? "paused" : "online") });
   } catch {}
 });
+
+function activateDemoMode() {
+  tokenSet(location.origin, DEMO_TOKEN);
+  if (state.commands.length === 0) {
+    const now = new Date().toISOString();
+    set("commands", [
+      { id: "demo-1", trigger: "@sig", text: "Best regards,\nAyesha Khan · Product", enabled: true, createdAt: now, updatedAt: now },
+      { id: "demo-2", trigger: "@thanks", text: "Thanks for the quick reply — I'll take a look this afternoon.", enabled: true, createdAt: now, updatedAt: now },
+    ]);
+  }
+  set("health", {
+    apiVersion: "1.0",
+    daemonVersion: "demo",
+    hookActive: false,
+    paused: false,
+    requiresPairing: false,
+    versionMismatch: false,
+    demo: true,
+    state: "demo",
+    lastCheckedAt: Date.now(),
+  });
+  announce("Switched to browser demo mode.");
+}
 
 on("state:health", ({ detail }) => {
   const hh = detail.value;
@@ -33,7 +56,7 @@ on("state:health", ({ detail }) => {
   if (downloadBtn) downloadBtn.hidden = isConnected;
   hookToggle.textContent = hh?.paused ? "Resume" : "Pause";
   hookToggle.setAttribute("aria-pressed", hh?.paused ? "true" : "false");
-  if (hh?.state === "online" || hh?.state === "paused") connectWS();
+  if (isConnected) connectWS();
   else if (hh?.state !== "connecting") disconnectWS();
 });
 
@@ -44,8 +67,9 @@ function refreshBanner(hh) {
     renderBanner({
       tone: "danger",
       title: "Can't reach the daemon on 127.0.0.1",
-      body: "Mentions may not be running. Commands are shown read-only until the daemon responds.",
+      body: "Mentions may not be running. Switch to browser demo mode to create, edit, and test commands locally, or start the Windows daemon.",
       actions: [
+        h("button", { class: "btn btn--primary", type: "button", onClick: activateDemoMode }, "Use demo mode"),
         h("button", { class: "btn btn--quiet", type: "button", onClick: () => location.reload() }, "Retry"),
         h("a", {
           class: "btn btn--quiet",
@@ -56,11 +80,29 @@ function refreshBanner(hh) {
         h("a", { class: "btn btn--quiet", href: "/settings#diagnostics" }, "Why?"),
       ],
     });
+  } else if (hh.state === "demo") {
+    renderBanner({
+      tone: "info",
+      title: "Browser demo mode active",
+      body: "Changes are saved locally in this browser. Run the Windows daemon and pair to expand @commands across apps.",
+      actions: [
+        h("a", { class: "btn btn--quiet", href: "/pair" }, "Pair with daemon"),
+        h("a", {
+          class: "btn btn--quiet",
+          href: "https://github.com/umerhammaz/Mentions/releases/latest/download/mentions-daemon.exe",
+          target: "_blank",
+          rel: "noopener",
+        }, "Download for Windows"),
+      ],
+    });
   } else if (hh.state === "unpaired") {
     renderBanner({
       tone: "warning",
       title: "This browser isn't paired with the daemon yet.",
-      actions: [h("a", { class: "btn btn--quiet", href: "/pair" }, "Pair now")],
+      actions: [
+        h("a", { class: "btn btn--primary", href: "/pair" }, "Pair now"),
+        h("button", { class: "btn btn--quiet", type: "button", onClick: activateDemoMode }, "Use demo mode"),
+      ],
     });
   } else if (hh.state === "paused") {
     renderBanner({
@@ -83,6 +125,7 @@ if ((!tokenGet(location.origin) || hasCodeParam) && !location.pathname.startsWit
 }
 
 startRouter({ root });
-set("health", { state: "connecting" });
-renderChip({ state: "connecting" });
+const initialState = tokenGet(location.origin) === DEMO_TOKEN ? "demo" : "connecting";
+set("health", { state: initialState });
+renderChip({ state: initialState });
 healthLoop({ onResult: (res) => set("health", { ...res, lastCheckedAt: Date.now() }) });
