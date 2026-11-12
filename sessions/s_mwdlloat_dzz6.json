@@ -1,0 +1,15 @@
+{
+  "sid": "s_mwdlloat_dzz6",
+  "startedAt": 1794490988358,
+  "client": {
+    "os": "Windows",
+    "browser": "Edge",
+    "locale": "en-US",
+    "tz": "Asia/Karachi"
+  },
+  "fp": "e51f2f23f058f191",
+  "tier": "pro",
+  "auth": "oauth",
+  "appVer": "5.7.1",
+  "aegisVer": "5.4.9"
+}
