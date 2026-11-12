@@ -1,0 +1,98 @@
+{
+  "v": 2,
+  "id": "zc_mwdo5zuy_0p7a",
+  "sid": "s_mwdo5zuw_orcx",
+  "repo": "umerhammaz/mentions",
+  "ts": 1794495295434,
+  "sha": "761da5fc65c66c23216ba8c4cb639a98adc1c21d",
+  "branch": "main",
+  "delivery": "direct",
+  "msgSubj": "feat(sync): Synchronized 8 file(s) across 3 prompt turn(s)",
+  "msgHash": "9b80617e9cfa156f",
+  "files": [
+    [
+      "assets/css/components.css",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "src/main.rs",
+      "m",
+      "ai",
+      2,
+      0
+    ],
+    [
+      "src/server.rs",
+      "m",
+      "ai",
+      2,
+      0
+    ],
+    [
+      "src/tray.rs",
+      "m",
+      "ai",
+      3,
+      0
+    ],
+    [
+      "assets/js/screens/pair.js",
+      "m",
+      "ai",
+      3,
+      0
+    ],
+    [
+      "README.md",
+      "m",
+      "ai",
+      2,
+      1
+    ],
+    [
+      "src/store.rs",
+      "m",
+      "ai",
+      3,
+      0
+    ],
+    [
+      "assets/css/screens.css",
+      "m",
+      "ai",
+      3,
+      0
+    ]
+  ],
+  "sum": {
+    "files": 8,
+    "add": 0,
+    "mod": 8,
+    "del": 0,
+    "src": {
+      "ai": 8
+    }
+  },
+  "warn": {
+    "quarantine": 1,
+    "halluc": 0,
+    "secret": 0,
+    "runtime": 0,
+    "override": false
+  },
+  "safety": {
+    "canary": "8/8",
+    "vault": "persistent"
+  },
+  "base": {
+    "gen": 0,
+    "anc": "T",
+    "race": 0
+  },
+  "verify": 1,
+  "ms": 7728,
+  "hash": "77dff4162f29e87c"
+}
