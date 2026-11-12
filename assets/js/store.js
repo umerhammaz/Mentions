@@ -9,11 +9,14 @@ export const state = {
   cacheLoaded: false,
 };
 
+let saveTimer = null;
+
 export function set(key, value) {
   const prev = state[key];
   state[key] = value;
   if (key === "commands" && Array.isArray(value)) {
-    cacheSave(value);
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => cacheSave(value), 60);
   }
   bus.dispatchEvent(new CustomEvent(`state:${key}`, { detail: { value, prev } }));
 }
@@ -66,4 +69,11 @@ const initialCache = cacheLoad();
 if (Array.isArray(initialCache) && initialCache.length > 0) {
   state.commands = initialCache;
   state.cacheLoaded = true;
+} else {
+  const now = new Date().toISOString();
+  state.commands = [
+    { id: "demo-1", trigger: "@sig", text: "Best regards,\nAyesha Khan · Product", enabled: true, createdAt: now, updatedAt: now },
+    { id: "demo-2", trigger: "@thanks", text: "Thanks for the quick reply — I'll take a look this afternoon.", enabled: true, createdAt: now, updatedAt: now },
+  ];
+  cacheSave(state.commands);
 }

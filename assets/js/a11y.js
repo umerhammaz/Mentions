@@ -1,4 +1,5 @@
 let liveTimer = null;
+const numFmt = new Intl.NumberFormat();
 
 export function announce(msg) {
   const live = document.getElementById("live");
@@ -58,11 +59,17 @@ export function formatDate(iso) {
 }
 
 export function formatNum(n) {
-  return new Intl.NumberFormat().format(n);
+  return numFmt.format(n);
 }
 
 export function truncate(s, n = 60) {
   if (!s) return "";
-  const first = s.split("\n")[0];
+  const slice = s.slice(0, n + 1);
+  const nl = slice.indexOf("\n");
+  const cr = slice.indexOf("\r");
+  let end = slice.length;
+  if (nl !== -1 && nl < end) end = nl;
+  if (cr !== -1 && cr < end) end = cr;
+  const first = slice.slice(0, end);
   return first.length > n ? first.slice(0, n - 1) + "..." : first;
 }

@@ -1,19 +1,43 @@
 import { h, useIcon } from "../dom.js";
-import { state, set, emit } from "../store.js";
-import { request, ApiError } from "../api.js";
+import { state, set, emit, tokenGet, tokenSet } from "../store.js";
+import { request, ApiError, DEMO_TOKEN } from "../api.js";
 import { navigate } from "../router.js";
-import { field, primaryButton, confirmDialog, toast, truncate } from "../ui.js";
+import { field, primaryButton, confirmDialog, toast, truncate, formatNum } from "../ui.js";
 import { focusFirstInvalid, announce } from "../a11y.js";
 
 const TRIGGER_RE = /^@[a-z0-9_-]{1,31}$/;
 const MAX_TEXT = 65536;
+const FAST_PREVIEW_LIMIT = 4000;
+const MAX_TEXT_LABEL = formatNum(MAX_TEXT);
 
 function normalizeTrigger(raw) {
   const cleaned = String(raw || "").trim().replace(/^@+/, "").toLowerCase();
   return cleaned ? `@${cleaned}` : "@";
 }
 
+function ensureEditableSession() {
+  const s = state.health?.state;
+  if (s !== "online" && s !== "paused" && s !== "demo") {
+    tokenSet(location.origin, DEMO_TOKEN);
+    set("health", {
+      apiVersion: "1.0",
+      daemonVersion: "demo",
+      hookActive: false,
+      paused: false,
+      requiresPairing: false,
+      versionMismatch: false,
+      demo: true,
+      state: "demo",
+      lastCheckedAt: Date.now(),
+    });
+  } else if (!tokenGet(location.origin)) {
+    tokenSet(location.origin, DEMO_TOKEN);
+  }
+}
+
 export async function renderEditor({ root, params }, { mode }) {
+  ensureEditableSession();
+
   const isNew = mode === "new";
   const container = h("section", { class: "editor", "aria-labelledby": "editor-h" });
   root.replaceChildren(container);
@@ -54,6 +78,11 @@ export async function renderEditor({ root, params }, { mode }) {
 
   set("ui", { ...state.ui, dirty: false });
 
+  let isFullScreen = false;
+  let activeTab = "write";
+  let showFullPreview = false;
+  let countFrame = 0;
+
   const onBeforeUnload = (e) => {
     if (state.ui.dirty) {
       e.preventDefault();
@@ -65,8 +94,9 @@ export async function renderEditor({ root, params }, { mode }) {
   const heading = isNew ? "Create command" : `Edit ${existing.trigger}`;
   const triggerErrSlot = h("div");
   const textErrSlot = h("div");
-  const previewHost = h("div", { class: "preview" });
-  const charCount = h("span", { class: "t-caption t-mono", "aria-live": "polite" });
+  const previewHost = h("div", { class: "preview", hidden: true });
+  const previewMoreSlot = h("div", { hidden: true });
+  const charCount = h("span", { class: "t-caption t-mono" }, `${formatNum(draft.text.length)} / ${MAX_TEXT_LABEL}`);
 
   const triggerInput = h("input", {
     id: "trigger",
@@ -94,15 +124,21 @@ export async function renderEditor({ root, params }, { mode }) {
   const textArea = h("textarea", {
     id: "text",
     class: "textarea",
-    rows: "10",
-    spellcheck: "true",
-    oninput: (e) => {
-      draft.text = e.target.value;
+    rows: "14",
+    spellcheck: "false",
+    autocomplete: "off",
+    autocorrect: "off",
+    autocapitalize: "off",
+    oninput: () => {
       markDirty();
-      updatePreviewAndCount();
-      if (textArea.getAttribute("aria-invalid") === "true") setFieldError("text", textError());
+      scheduleCountUpdate();
+      if (textArea.getAttribute("aria-invalid") === "true") {
+        const len = getTextLength();
+        if (len > 0 && len <= MAX_TEXT) setFieldError("text", null);
+      }
     },
     onblur: () => {
+      syncTextFromInput();
       const err = textError();
       setFieldError("text", err);
       if (err) announce(err);
@@ -134,6 +170,47 @@ export async function renderEditor({ root, params }, { mode }) {
     h("span", { class: "t-body" }, "Expands when typed")
   );
 
+  const writeTabBtn = h("button", {
+    type: "button",
+    class: "editor__tab",
+    role: "tab",
+    "aria-selected": "true",
+    onClick: () => switchTab("write"),
+  }, "Write");
+
+  const previewTabBtn = h("button", {
+    type: "button",
+    class: "editor__tab",
+    role: "tab",
+    "aria-selected": "false",
+    onClick: () => switchTab("preview"),
+  }, "Preview");
+
+  const fullScreenBtn = h("button", {
+    type: "button",
+    class: "btn btn--quiet",
+    onClick: () => {
+      isFullScreen = !isFullScreen;
+      container.classList.toggle("editor--full", isFullScreen);
+      fullScreenBtn.textContent = isFullScreen ? "Exit full screen" : "Full screen";
+      textArea.focus();
+    },
+  }, "Full screen");
+
+  const copyPromptBtn = h("button", {
+    type: "button",
+    class: "btn btn--quiet",
+    onClick: async () => {
+      syncTextFromInput();
+      try {
+        await navigator.clipboard.writeText(draft.text);
+        toast({ message: "Prompt copied." });
+      } catch {
+        toast({ message: "Couldn't copy prompt." });
+      }
+    },
+  }, "Copy prompt");
+
   const submitBtn = primaryButton(isNew ? "Create command" : "Save changes", null, { type: "submit" });
 
   const triggerField = field({
@@ -145,24 +222,43 @@ export async function renderEditor({ root, params }, { mode }) {
   });
   triggerField.append(triggerErrSlot);
 
+  const groupField = field({
+    id: "group",
+    label: "Group",
+    help: "Optional. Groups commands in the list.",
+    optional: true,
+    control: groupInput,
+  });
+
+  const editorToolbar = h("div", { class: "editor__toolbar" },
+    h("div", { class: "editor__tabs", role: "tablist", "aria-label": "Editor mode" }, writeTabBtn, previewTabBtn),
+    h("div", { style: { display: "flex", gap: "var(--space-2)", alignItems: "center", flexWrap: "wrap" } },
+      copyPromptBtn,
+      fullScreenBtn
+    )
+  );
+
   const textField = field({
     id: "text",
-    label: "Pastes",
-    help: "Preserved exactly as typed, including line breaks.",
+    label: "Prompt text",
+    help: "Kept exactly as typed, including spaces and line breaks.",
     required: true,
-    control: textArea,
+    control: h("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-2)" } },
+      editorToolbar,
+      textArea,
+      previewHost,
+      previewMoreSlot
+    ),
   });
   textField.append(textErrSlot);
 
   const form = h("form", { class: "editor__form", novalidate: true, onsubmit: onSubmit },
-    triggerField,
+    h("div", { class: "editor__meta-row" }, triggerField, groupField),
     textField,
-    h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "var(--space-3)" } },
+    h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "var(--space-3)", flexWrap: "wrap" } },
       charCount,
-      h("span", { class: "t-caption" }, "Whitespace preserved")
+      enabledSwitch
     ),
-    field({ id: "group", label: "Group", help: "Optional. Groups commands in the list.", optional: true, control: groupInput }),
-    h("div", null, enabledSwitch),
     h("div", { class: "editor__actions" },
       !isNew ? h("button", {
         class: "btn btn--quiet",
@@ -180,36 +276,76 @@ export async function renderEditor({ root, params }, { mode }) {
     h("a", { class: "btn btn--quiet", href: "/" }, "Back to Commands")
   );
 
-  const grid = h("div", { class: "editor__grid" },
-    form,
-    h("aside", { class: "editor__preview" },
-      h("h2", { class: "t-label", style: { marginBottom: "var(--space-2)" } }, "Preview"),
-      previewHost
-    )
-  );
+  container.replaceChildren(head, form);
 
-  container.replaceChildren(head, grid);
-  updatePreviewAndCount();
+  function getTextLength() {
+    return typeof textArea.textLength === "number" ? textArea.textLength : textArea.value.length;
+  }
+
+  function syncTextFromInput() {
+    draft.text = textArea.value;
+  }
 
   function markDirty() {
     if (!state.ui.dirty) set("ui", { ...state.ui, dirty: true });
   }
 
-  function updatePreviewAndCount() {
-    charCount.textContent = `${new Intl.NumberFormat().format(draft.text.length)} / ${new Intl.NumberFormat().format(MAX_TEXT)}`;
-    const text = draft.text || "(nothing yet)";
-    previewHost.replaceChildren();
-    const lines = text.split("\n");
-    lines.forEach((line, i) => {
-      for (const ch of line) {
-        if (ch === " ") previewHost.append(h("span", { class: "preview__ws", "aria-hidden": "true" }, "·"));
-        else previewHost.append(document.createTextNode(ch));
-      }
-      if (i < lines.length - 1) {
-        previewHost.append(h("span", { class: "preview__ws", "aria-hidden": "true" }, "¶"));
-        previewHost.append(document.createTextNode("\n"));
-      }
+  function scheduleCountUpdate() {
+    if (countFrame) return;
+    countFrame = requestAnimationFrame(() => {
+      countFrame = 0;
+      charCount.textContent = `${formatNum(getTextLength())} / ${MAX_TEXT_LABEL}`;
     });
+  }
+
+  function switchTab(nextTab) {
+    activeTab = nextTab;
+    const isWrite = nextTab === "write";
+    writeTabBtn.setAttribute("aria-selected", isWrite ? "true" : "false");
+    previewTabBtn.setAttribute("aria-selected", isWrite ? "false" : "true");
+    textArea.hidden = !isWrite;
+    previewHost.hidden = isWrite;
+    if (isWrite) {
+      previewMoreSlot.hidden = true;
+      textArea.focus();
+    } else {
+      syncTextFromInput();
+      showFullPreview = false;
+      renderPreviewNow();
+    }
+  }
+
+  function renderPreviewNow() {
+    const raw = draft.text;
+    if (!raw) {
+      previewHost.textContent = "(nothing yet)";
+      previewMoreSlot.hidden = true;
+      previewMoreSlot.replaceChildren();
+      return;
+    }
+    const isCapped = !showFullPreview && raw.length > FAST_PREVIEW_LIMIT;
+    const slice = isCapped ? raw.slice(0, FAST_PREVIEW_LIMIT) : raw;
+    const formatted = slice.replace(/ /g, "·").replace(/\n/g, "¶\n");
+    previewHost.textContent = isCapped
+      ? `${formatted}\n\n... (${formatNum(raw.length - FAST_PREVIEW_LIMIT)} more characters)`
+      : formatted;
+
+    if (isCapped) {
+      previewMoreSlot.hidden = false;
+      previewMoreSlot.replaceChildren(
+        h("button", {
+          type: "button",
+          class: "btn btn--quiet",
+          onClick: () => {
+            showFullPreview = true;
+            renderPreviewNow();
+          },
+        }, `Show all ${formatNum(raw.length)} characters`)
+      );
+    } else {
+      previewMoreSlot.hidden = true;
+      previewMoreSlot.replaceChildren();
+    }
   }
 
   function setFieldError(id, msg) {
@@ -236,8 +372,9 @@ export async function renderEditor({ root, params }, { mode }) {
   }
 
   function textError() {
-    if (!draft.text) return "Text is required.";
-    if (draft.text.length > MAX_TEXT) return `Text is over the ${MAX_TEXT} character limit.`;
+    const len = getTextLength();
+    if (!len) return "Text is required.";
+    if (len > MAX_TEXT) return `Text is over the ${MAX_TEXT} character limit.`;
     return null;
   }
 
@@ -249,6 +386,7 @@ export async function renderEditor({ root, params }, { mode }) {
       confirmLabel: "Delete command",
       danger: true,
       onConfirm: async () => {
+        ensureEditableSession();
         try {
           await request(`/api/commands/${encodeURIComponent(existing.id)}`, { method: "DELETE" });
           const snapshot = existing;
@@ -288,14 +426,17 @@ export async function renderEditor({ root, params }, { mode }) {
 
   async function onSubmit(e) {
     e.preventDefault();
+    syncTextFromInput();
     const tErr = triggerError();
     const xErr = textError();
     setFieldError("trigger", tErr);
     setFieldError("text", xErr);
     if (tErr || xErr) {
+      if (xErr && activeTab !== "write") switchTab("write");
       focusFirstInvalid(container);
       return;
     }
+    ensureEditableSession();
     submitBtn.disabled = true;
     const original = submitBtn.textContent;
     submitBtn.textContent = "Saving...";
@@ -343,6 +484,7 @@ export async function renderEditor({ root, params }, { mode }) {
   return {
     title: isNew ? "Create command" : "Edit command",
     unmount() {
+      if (countFrame) cancelAnimationFrame(countFrame);
       window.removeEventListener("beforeunload", onBeforeUnload);
       set("ui", { ...state.ui, dirty: false });
     },

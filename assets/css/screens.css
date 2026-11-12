@@ -8,14 +8,56 @@
   .cmds__filter { margin-bottom: var(--space-3); max-width: 420px; }
 
   .editor {
-    display: flex; flex-direction: column; gap: var(--space-5);
-    max-width: 760px;
+    display: flex; flex-direction: column; gap: var(--space-4);
+    max-width: 960px;
   }
-  .editor__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
-  .editor__grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5); align-items: start; }
+  .editor--full {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    max-width: none;
+    background: var(--surface);
+    padding: var(--space-4) var(--space-6);
+    overflow: auto;
+  }
+  .editor--full .textarea,
+  .editor--full .preview {
+    min-height: calc(100vh - 280px);
+  }
+  .editor__head {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+    flex-wrap: wrap;
+  }
+  .editor__meta-row {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) minmax(200px, 1fr);
+    gap: var(--space-4);
+    align-items: start;
+  }
   .editor__form { display: flex; flex-direction: column; gap: var(--space-4); }
-  .editor__preview { position: sticky; top: calc(var(--appbar-h) + var(--space-4)); }
-  .editor__actions { display: flex; gap: var(--space-2); align-items: center; justify-content: flex-end; }
+  .editor__toolbar {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+    flex-wrap: wrap;
+  }
+  .editor__tabs {
+    display: inline-flex; gap: 2px; padding: 2px;
+    background: var(--surface-container);
+    border: var(--border-structure);
+    border-radius: var(--radius-control);
+  }
+  .editor__tab {
+    padding: 4px var(--space-3);
+    border-radius: 6px;
+    font-size: var(--fs-label);
+    font-weight: 500;
+    color: var(--on-surface-variant);
+  }
+  .editor__tab[aria-selected="true"] {
+    background: var(--surface);
+    color: var(--on-surface);
+    box-shadow: var(--surface-elev-1);
+  }
+  .editor__actions { display: flex; gap: var(--space-2); align-items: center; justify-content: flex-end; flex-wrap: wrap; }
   .editor__unsaved {
     display: flex; gap: var(--space-2); align-items: center;
     padding: var(--space-2) var(--space-3);
@@ -46,8 +88,8 @@
     text-align: center; padding: var(--space-3);
   }
 
-  @media (max-width: 959px) {
-    .editor__grid { grid-template-columns: 1fr; }
-    .editor__preview { position: static; }
+  @media (max-width: 720px) {
+    .editor__meta-row { grid-template-columns: 1fr; }
+    .editor--full { padding: var(--space-3); }
   }
 }

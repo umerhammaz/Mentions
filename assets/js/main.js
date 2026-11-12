@@ -24,7 +24,7 @@ hookToggle.addEventListener("click", async () => {
   } catch {}
 });
 
-function activateDemoMode() {
+export function activateDemoMode() {
   tokenSet(location.origin, DEMO_TOKEN);
   if (state.commands.length === 0) {
     const now = new Date().toISOString();
@@ -44,11 +44,17 @@ function activateDemoMode() {
     state: "demo",
     lastCheckedAt: Date.now(),
   });
-  announce("Switched to browser demo mode.");
+  announce("Switched to browser mode.");
 }
+
+let lastUiSig = "";
 
 on("state:health", ({ detail }) => {
   const hh = detail.value;
+  const sig = `${hh?.state || ""}:${Boolean(hh?.paused)}`;
+  if (sig === lastUiSig) return;
+  lastUiSig = sig;
+
   renderChip(hh);
   refreshBanner(hh);
   const isConnected = hh?.state === "online" || hh?.state === "paused";
@@ -67,9 +73,9 @@ function refreshBanner(hh) {
     renderBanner({
       tone: "danger",
       title: "Can't reach the daemon on 127.0.0.1",
-      body: "Mentions may not be running. Switch to browser demo mode to create, edit, and test commands locally, or start the Windows daemon.",
+      body: "Mentions may not be running. Switch to browser mode to create, edit, and test commands locally, or start the Windows daemon.",
       actions: [
-        h("button", { class: "btn btn--primary", type: "button", onClick: activateDemoMode }, "Use demo mode"),
+        h("button", { class: "btn btn--primary", type: "button", onClick: activateDemoMode }, "Use browser editor"),
         h("button", { class: "btn btn--quiet", type: "button", onClick: () => location.reload() }, "Retry"),
         h("a", {
           class: "btn btn--quiet",
@@ -83,8 +89,8 @@ function refreshBanner(hh) {
   } else if (hh.state === "demo") {
     renderBanner({
       tone: "info",
-      title: "Browser demo mode active",
-      body: "Changes are saved locally in this browser. Run the Windows daemon and pair to expand @commands across apps.",
+      title: "Browser editor active",
+      body: "Prompts are saved in this browser. Run the Windows app and pair when you want @commands to expand across apps.",
       actions: [
         h("a", { class: "btn btn--quiet", href: "/pair" }, "Pair with daemon"),
         h("a", {
@@ -101,7 +107,7 @@ function refreshBanner(hh) {
       title: "This browser isn't paired with the daemon yet.",
       actions: [
         h("a", { class: "btn btn--primary", href: "/pair" }, "Pair now"),
-        h("button", { class: "btn btn--quiet", type: "button", onClick: activateDemoMode }, "Use demo mode"),
+        h("button", { class: "btn btn--quiet", type: "button", onClick: activateDemoMode }, "Use browser editor"),
       ],
     });
   } else if (hh.state === "paused") {
@@ -120,12 +126,13 @@ function refreshBanner(hh) {
 }
 
 const hasCodeParam = new URLSearchParams(location.search).has("code");
-if ((!tokenGet(location.origin) || hasCodeParam) && !location.pathname.startsWith("/pair")) {
+if (hasCodeParam && !location.pathname.startsWith("/pair")) {
   history.replaceState(null, "", "/pair" + location.search);
+} else if (!tokenGet(location.origin) && !location.pathname.startsWith("/pair")) {
+  tokenSet(location.origin, DEMO_TOKEN);
 }
 
 startRouter({ root });
 const initialState = tokenGet(location.origin) === DEMO_TOKEN ? "demo" : "connecting";
 set("health", { state: initialState });
-renderChip({ state: initialState });
 healthLoop({ onResult: (res) => set("health", { ...res, lastCheckedAt: Date.now() }) });

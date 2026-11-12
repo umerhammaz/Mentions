@@ -51,7 +51,16 @@
     color: var(--on-surface);
     font-size: var(--fs-body); line-height: var(--lh-body);
   }
-  .textarea { font-family: var(--font-mono); font-size: var(--fs-mono); line-height: var(--lh-mono); resize: vertical; min-height: 160px; padding: var(--space-3); }
+  .textarea {
+    font-family: var(--font-mono);
+    font-size: var(--fs-mono);
+    line-height: var(--lh-mono);
+    resize: vertical;
+    min-height: 280px;
+    padding: var(--space-3);
+    text-rendering: optimizeSpeed;
+    contain: content;
+  }
   .input:focus-visible, .textarea:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); border-color: transparent; }
   .input[aria-invalid="true"], .textarea[aria-invalid="true"] { border-color: var(--danger); border-width: 1.5px; }
   .input-affix { position: relative; }
@@ -194,8 +203,12 @@
     font-family: var(--font-mono);
     font-size: var(--fs-mono); line-height: var(--lh-mono);
     white-space: pre-wrap; word-break: break-word;
-    min-height: 100px;
+    min-height: 280px;
+    max-height: 60vh;
+    overflow: auto;
     color: var(--on-surface);
+    text-rendering: optimizeSpeed;
+    contain: content;
   }
   .preview__ws { color: var(--accent); opacity: 0.6; }
 

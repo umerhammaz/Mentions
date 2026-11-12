@@ -9,7 +9,6 @@
     background: var(--surface);
     color: var(--on-surface);
     -webkit-font-smoothing: antialiased;
-    text-rendering: optimizeLegibility;
   }
   [hidden] { display: none !important; }
   img, svg { display: block; max-width: 100%; }
