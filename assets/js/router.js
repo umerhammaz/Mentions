@@ -65,9 +65,9 @@ export function startRouter({ root, defaultTitle = "Mentions" }) {
 
   document.addEventListener("click", (e) => {
     const a = e.target.closest("a[href]");
-    if (!a) return;
+    if (!a || a.hasAttribute("download")) return;
     const href = a.getAttribute("href");
-    if (!href || href.startsWith("http") || href.startsWith("//") || href.startsWith("#")) return;
+    if (!href || href.startsWith("http") || href.startsWith("//") || href.startsWith("#") || href.startsWith("blob:") || href.startsWith("data:") || href.startsWith("mailto:")) return;
     if (a.target === "_blank" || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     e.preventDefault();
     const currentFull = location.pathname + location.search + location.hash;

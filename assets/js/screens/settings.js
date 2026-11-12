@@ -237,7 +237,7 @@ const screen = {
         const data = await request("/api/commands/export");
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
         const url = URL.createObjectURL(blob);
-        const a = h("a", { href: url, download: `mentions-${Date.now()}.json` });
+        const a = h("a", { href: url, download: `mentions-${Date.now()}.json`, onClick: (e) => e.stopPropagation() });
         document.body.append(a); a.click(); a.remove();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       } catch { toast({ message: "Couldn't export commands." }); }
