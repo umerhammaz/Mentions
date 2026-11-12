@@ -43,9 +43,9 @@ export function renderBanner({ tone = "info", title, body, actions = [] }) {
     useIcon(tone === "danger" ? "alert" : tone === "warning" ? "alert" : "info"),
     h("div", { class: "banner__body" },
       title ? h("div", { class: "banner__title" }, title) : null,
-      body ? h("div", null, body) : null,
-      actions.length ? h("div", { class: "banner__actions" }, ...actions) : null
-    )
+      body ? h("div", null, body) : null
+    ),
+    actions.length ? h("div", { class: "banner__actions" }, ...actions) : null
   );
   banners.append(el);
   return el;

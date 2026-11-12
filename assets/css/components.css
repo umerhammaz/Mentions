@@ -41,6 +41,7 @@
     align-items: center;
     gap: var(--space-2);
     min-width: 0;
+    flex: 1;
     color: var(--on-surface-variant);
   }
   .banner__actions {
@@ -67,6 +68,9 @@
   }
   .banner__actions a,
   .banner__actions button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     height: 28px;
     padding-inline: var(--space-3);
     font-size: var(--fs-caption);
