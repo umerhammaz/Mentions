@@ -1,0 +1,49 @@
+{
+  "v": 2,
+  "id": "zc_mwdnh1bv_tly3",
+  "sid": "s_mwdlloat_dzz6",
+  "repo": "umerhammaz/mentions",
+  "ts": 1794494131107,
+  "sha": "e8346d93925b0d2e9e578b5c3ec493d9ac25fc60",
+  "branch": "main",
+  "delivery": "direct",
+  "msgSubj": "feat(sync): Synchronized 1 file(s) across 2 prompt turn(s)",
+  "msgHash": "0aab049ca038524a",
+  "files": [
+    [
+      "src/tray.rs",
+      "m",
+      "ai",
+      2,
+      0
+    ]
+  ],
+  "sum": {
+    "files": 1,
+    "add": 0,
+    "mod": 1,
+    "del": 0,
+    "src": {
+      "ai": 1
+    }
+  },
+  "warn": {
+    "quarantine": 0,
+    "halluc": 0,
+    "secret": 0,
+    "runtime": 0,
+    "override": false
+  },
+  "safety": {
+    "canary": "8/8",
+    "vault": "persistent"
+  },
+  "base": {
+    "gen": 3,
+    "anc": "T",
+    "race": 0
+  },
+  "verify": 1,
+  "ms": 4334,
+  "hash": "a528e4cae408fee6"
+}
