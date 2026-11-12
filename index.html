@@ -15,20 +15,21 @@
 <body>
 <a class="skip" href="#main">Skip to content</a>
 
-<header class="appbar">
-  <h1 class="appbar__title">Mentions</h1>
-</header>
-
 <nav class="rail" aria-label="Primary">
-  <div class="rail__nav">
-    <a class="rail__link" href="/" data-nav="commands">
-      <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#list"/></svg>
-      <span>Commands</span>
-    </a>
-    <a class="rail__link" href="/settings" data-nav="settings">
-      <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#sliders"/></svg>
-      <span>Settings</span>
-    </a>
+  <div class="rail__top">
+    <div class="rail__brand">
+      <h1 class="appbar__title">Mentions</h1>
+    </div>
+    <div class="rail__nav">
+      <a class="rail__link" href="/" data-nav="commands">
+        <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#list"/></svg>
+        <span>Commands</span>
+      </a>
+      <a class="rail__link" href="/settings" data-nav="settings">
+        <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#sliders"/></svg>
+        <span>Settings</span>
+      </a>
+    </div>
   </div>
   <div class="rail__footer">
     <div class="rail__status-row">
@@ -39,9 +40,10 @@
   </div>
 </nav>
 
-<div id="banners" class="banners"></div>
-
-<main id="main" tabindex="-1"></main>
+<div class="workspace">
+  <div id="banners" class="banners"></div>
+  <main id="main" tabindex="-1"></main>
+</div>
 
 <div id="live" class="sr-only" aria-live="polite"></div>
 <div id="alert" class="sr-only" aria-live="assertive"></div>
