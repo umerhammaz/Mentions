@@ -13,9 +13,8 @@ use std::thread;
 use std::time::Duration;
 use store::AppState;
 
-pub const CF_CONTROLLER_URL: &str = "https://mentions-but.pages.dev";
-pub const VERCEL_CONTROLLER_URL: &str = "https://mentions-blond.vercel.app";
-pub const CONTROLLER_URL: &str = CF_CONTROLLER_URL;
+pub const PRIMARY_CONTROLLER_URL: &str = "https://mentions.umer.ai";
+pub const CONTROLLER_URL: &str = PRIMARY_CONTROLLER_URL;
 
 fn main() {
     #[cfg(windows)]

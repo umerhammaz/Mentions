@@ -16,6 +16,7 @@ const screen = {
 
     const input = h("input", {
       id: "code", class: "input pair__code", type: "text", maxlength: "6", value: initial,
+      placeholder: "••••••",
       inputmode: "text", autocomplete: "one-time-code", spellcheck: "false",
       "aria-describedby": "code-help",
       oninput: (e) => {
@@ -23,6 +24,9 @@ const screen = {
         if (e.target.value !== cleaned) e.target.value = cleaned;
         input.removeAttribute("aria-invalid");
         errHost.replaceChildren();
+        if (cleaned.length === 6) {
+          onSubmit();
+        }
       },
     });
     const errHost = h("div", { id: "code-err" });
@@ -36,31 +40,42 @@ const screen = {
         control: input,
       }),
       errHost,
-      h("div", { style: { display: "flex", justifyContent: "flex-end" } }, submitBtn)
+      h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "var(--space-2)", marginTop: "var(--space-2)" } },
+        h("button", {
+          class: "btn btn--quiet",
+          type: "button",
+          onClick: async () => {
+            try {
+              const text = await navigator.clipboard.readText();
+              const cleaned = sanitize(text);
+              if (cleaned) {
+                input.value = cleaned;
+                if (cleaned.length === 6) onSubmit();
+              }
+            } catch {}
+          },
+        }, "Paste code"),
+        submitBtn
+      )
     );
 
-    const setupCard = h("div", {
-      class: "banner",
-      style: { marginTop: "var(--space-4)", flexDirection: "column", gap: "var(--space-3)" },
-    },
-      h("div", { class: "banner__body" },
-        h("div", { class: "banner__title" }, "Don't have the Windows app running yet?"),
-        h("p", { class: "t-caption", style: { marginTop: "var(--space-1)" } },
-          "Download and run mentions-daemon.exe on Windows to get your 6-character tray pairing code, or preview the controller in offline demo mode."
-        ),
-        h("div", { class: "banner__actions", style: { marginTop: "var(--space-3)" } },
-          h("a", {
-            class: "btn btn--primary",
-            href: DOWNLOAD_URL,
-            target: "_blank",
-            rel: "noopener",
-          }, "Download for Windows (.exe)"),
-          h("button", {
-            class: "btn",
-            type: "button",
-            onClick: enterDemoMode,
-          }, "Preview without daemon")
-        )
+    const setupCard = h("div", { class: "pair__card" },
+      h("div", { class: "pair__card-title" }, "Don't have the Windows app running yet?"),
+      h("p", { class: "pair__card-body" },
+        "Download and run mentions-daemon.exe on Windows to get your 6-character tray pairing code, or preview without the app in browser mode."
+      ),
+      h("div", { class: "pair__card-actions" },
+        h("a", {
+          class: "btn btn--primary",
+          href: DOWNLOAD_URL,
+          target: "_blank",
+          rel: "noopener",
+        }, "Download for Windows (.exe)"),
+        h("button", {
+          class: "btn btn--quiet",
+          type: "button",
+          onClick: enterDemoMode,
+        }, "Preview without app")
       )
     );
 

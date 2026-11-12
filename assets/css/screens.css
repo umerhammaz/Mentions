@@ -80,12 +80,50 @@
   .settings__row-text { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 2px; }
 
   .pair {
-    max-width: 480px; margin-inline: auto; margin-top: var(--space-8);
-    display: flex; flex-direction: column; gap: var(--space-4);
+    max-width: 460px;
+    margin-inline: auto;
+    margin-top: var(--space-6);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
   }
   .pair__code {
-    font-family: var(--font-mono); font-size: 22px; letter-spacing: 0.2em;
-    text-align: center; padding: var(--space-3);
+    font-family: var(--font-mono);
+    font-size: 24px;
+    letter-spacing: 0.35em;
+    text-align: center;
+    padding: var(--space-3);
+    text-transform: uppercase;
+  }
+  .pair__card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    background: var(--surface-container);
+    border: var(--border-structure);
+    border-radius: var(--radius-container);
+  }
+  .pair__card-title {
+    font-size: var(--fs-label);
+    font-weight: 600;
+    color: var(--on-surface);
+  }
+  .pair__card-body {
+    font-size: var(--fs-caption);
+    line-height: var(--lh-caption);
+    color: var(--on-surface-variant);
+  }
+  .pair__card-actions {
+    display: flex;
+    gap: var(--space-2);
+    align-items: center;
+    flex-wrap: wrap;
+    margin-top: var(--space-1);
+  }
+  .pair__card-actions .btn {
+    font-size: var(--fs-caption);
+    height: 32px;
   }
 
   @media (max-width: 720px) {

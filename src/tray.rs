@@ -16,6 +16,7 @@ const ID_VERSION: usize = 1000;
 const ID_OPEN: usize = 1001;
 const ID_OPEN_LOCAL: usize = 1005;
 const ID_PAIR: usize = 1002;
+const ID_COPY_PAIR: usize = 1007;
 const ID_TOGGLE_PAUSE: usize = 1003;
 const ID_RESTART: usize = 1006;
 const ID_QUIT: usize = 1004;
@@ -80,6 +81,7 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
                     ID_OPEN => launch_controller(),
                     ID_OPEN_LOCAL => launch_local_controller(),
                     ID_PAIR => launch_pairing(),
+                    ID_COPY_PAIR => copy_pair_code_to_clipboard(),
                     ID_TOGGLE_PAUSE => toggle_pause(),
                     ID_RESTART => crate::restart_daemon(),
                     ID_QUIT => {
@@ -106,10 +108,8 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
         };
         let (paused, code) = {
             let mut s = ctx.state.lock().unwrap();
-            if store::now_secs() > s.pair_expires_at {
-                s.refresh_pair_code();
-            }
-            (s.settings.paused, s.pair_code.clone())
+            let c = s.get_or_create_pair_code();
+            (s.settings.paused, c)
         };
 
         let menu = CreatePopupMenu();
@@ -122,6 +122,9 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
         let open_lbl: Vec<u16> = "Open Web Controller\0".encode_utf16().collect();
         let local_lbl: Vec<u16> = "Open Local Controller (Offline)\0".encode_utf16().collect();
         let pair_lbl: Vec<u16> = format!("Pair Browser (Code: {})\0", code)
+            .encode_utf16()
+            .collect();
+        let copy_pair_lbl: Vec<u16> = format!("Copy Pair Code ({})\0", code)
             .encode_utf16()
             .collect();
         let pause_lbl: Vec<u16> = if paused {
@@ -137,6 +140,7 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
         AppendMenuW(menu, MF_STRING, ID_OPEN, open_lbl.as_ptr());
         AppendMenuW(menu, MF_STRING, ID_OPEN_LOCAL, local_lbl.as_ptr());
         AppendMenuW(menu, MF_STRING, ID_PAIR, pair_lbl.as_ptr());
+        AppendMenuW(menu, MF_STRING, ID_COPY_PAIR, copy_pair_lbl.as_ptr());
         AppendMenuW(menu, MF_STRING, ID_TOGGLE_PAUSE, pause_lbl.as_ptr());
         AppendMenuW(menu, MF_SEPARATOR, 0, std::ptr::null());
         AppendMenuW(menu, MF_STRING, ID_RESTART, restart_lbl.as_ptr());
@@ -165,7 +169,7 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
         };
         let (needs_pair, code, port) = {
             let mut s = ctx.state.lock().unwrap();
-            let code = s.refresh_pair_code();
+            let code = s.get_or_create_pair_code();
             (s.tokens.is_empty(), code, s.settings.port)
         };
         if needs_pair {
@@ -186,7 +190,7 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
         };
         let (code, port) = {
             let mut s = ctx.state.lock().unwrap();
-            (s.refresh_pair_code(), s.settings.port)
+            (s.get_or_create_pair_code(), s.settings.port)
         };
         let url = format!("http://127.0.0.1:{}/pair?code={}&port={}", port, code, port);
         open_browser(&url);
@@ -198,10 +202,48 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
         };
         let (code, port) = {
             let mut s = ctx.state.lock().unwrap();
-            (s.refresh_pair_code(), s.settings.port)
+            (s.get_or_create_pair_code(), s.settings.port)
         };
         let url = format!("{}/pair?code={}&port={}", super::CONTROLLER_URL, code, port);
         open_browser(&url);
+    }
+
+    fn copy_pair_code_to_clipboard() {
+        let Some(ctx) = TRAY_CTX.get() else {
+            return;
+        };
+        let code = {
+            let mut s = ctx.state.lock().unwrap();
+            s.get_or_create_pair_code()
+        };
+
+        #[cfg(windows)]
+        unsafe {
+            use windows_sys::Win32::System::DataExchange::{
+                CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData,
+            };
+            use windows_sys::Win32::System::Memory::{
+                GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE,
+            };
+
+            const CF_UNICODETEXT: u32 = 13;
+            if OpenClipboard(std::ptr::null_mut()) != 0 {
+                EmptyClipboard();
+                let mut wide: Vec<u16> = code.encode_utf16().collect();
+                wide.push(0);
+                let byte_len = wide.len() * 2;
+                let hmem = GlobalAlloc(GMEM_MOVEABLE, byte_len);
+                if !hmem.is_null() {
+                    let dst = GlobalLock(hmem) as *mut u16;
+                    if !dst.is_null() {
+                        std::ptr::copy_nonoverlapping(wide.as_ptr(), dst, wide.len());
+                        GlobalUnlock(hmem);
+                        SetClipboardData(CF_UNICODETEXT, hmem);
+                    }
+                }
+                CloseClipboard();
+            }
+        }
     }
 
     fn toggle_pause() {

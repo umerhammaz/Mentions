@@ -103,6 +103,14 @@ impl AppState {
         state
     }
 
+    pub fn get_or_create_pair_code(&mut self) -> String {
+        let now = now_secs();
+        if now < self.pair_expires_at && !self.pair_code.is_empty() {
+            return self.pair_code.clone();
+        }
+        self.refresh_pair_code()
+    }
+
     pub fn refresh_pair_code(&mut self) -> String {
         let (code, exp) = generate_pair_code();
         self.pair_code = code.clone();
