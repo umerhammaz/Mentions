@@ -89,16 +89,16 @@ function refreshBanner(hh) {
   } else if (hh.state === "demo") {
     renderBanner({
       tone: "info",
-      title: "Browser editor active",
-      body: "Prompts are saved in this browser. Run the Windows app and pair when you want @commands to expand across apps.",
+      title: "Browser mode",
+      body: "Prompts saved locally. Run and pair daemon to expand across Windows apps.",
       actions: [
-        h("a", { class: "btn btn--quiet", href: "/pair" }, "Pair with daemon"),
+        h("a", { class: "btn btn--primary", href: "/pair" }, "Pair app"),
         h("a", {
           class: "btn btn--quiet",
           href: "https://github.com/umerhammaz/Mentions/releases/latest/download/mentions-daemon.exe",
           target: "_blank",
           rel: "noopener",
-        }, "Download for Windows"),
+        }, "Download"),
       ],
     });
   } else if (hh.state === "unpaired") {

@@ -28,10 +28,17 @@ jobs:
           name: mentions-daemon-windows-x64
           path: target/release/mentions-daemon.exe
 
+      - name: Extract Cargo version
+        id: get_version
+        shell: bash
+        run: |
+          VERSION=$(grep '^version =' Cargo.toml | head -1 | cut -d '"' -f 2)
+          echo "VERSION=v$VERSION" >> $GITHUB_OUTPUT
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.1.0
-          name: Mentions Windows Daemon (Latest)
+          tag_name: ${{ steps.get_version.outputs.VERSION }}
+          name: Mentions Windows Daemon (${{ steps.get_version.outputs.VERSION }})
           prerelease: false
           files: target/release/mentions-daemon.exe

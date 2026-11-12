@@ -66,11 +66,12 @@ const screen = {
       h("div", { class: "settings__row" },
         h("div", { class: "settings__row-text" },
           h("span", { class: "t-body" }, "Daemon port"),
-          h("span", { class: "t-caption" }, "Changing this requires restarting the daemon.")
+          h("span", { class: "t-caption" }, "Changing this restarts the daemon automatically.")
         ),
-        h("div", { style: { display: "flex", gap: "var(--space-2)", alignItems: "center" } },
+        h("div", { style: { display: "flex", gap: "var(--space-2)", alignItems: "center", flexWrap: "wrap" } },
           h("span", { class: "code-token" }, String(settings.port ?? 31415)),
-          h("button", { class: "btn btn--quiet", type: "button", onClick: () => testConnection() }, "Test connection")
+          h("button", { class: "btn btn--quiet", type: "button", onClick: () => testConnection() }, "Test connection"),
+          h("button", { class: "btn btn--quiet", type: "button", onClick: () => restartDaemon() }, "Restart daemon")
         )
       )
     ]);
@@ -159,14 +160,20 @@ const screen = {
       )
     ]);
 
+    const versionStatusSlot = h("span", { class: "t-caption" }, "Checking for updates...");
+
     section("diagnostics", "Diagnostics", () => [
       h("dl", { style: { display: "grid", gridTemplateColumns: "max-content 1fr", gap: "var(--space-2) var(--space-4)", fontSize: "var(--fs-label)" } },
         dt("Daemon version"), dd(state.health?.daemonVersion || "—"),
+        dt("Update status"), dd(versionStatusSlot),
         dt("API version"), dd(state.health?.apiVersion || "—"),
         dt("Hook active"), dd(state.health?.hookActive ? "Yes" : "No"),
         dt("State"), dd(state.health?.state || "—"),
       ),
-      h("button", { class: "btn btn--quiet", type: "button", onClick: copyDiagnostics }, "Copy diagnostics")
+      h("div", { style: { display: "flex", gap: "var(--space-2)", alignItems: "center", flexWrap: "wrap" } },
+        h("button", { class: "btn btn--quiet", type: "button", onClick: copyDiagnostics }, "Copy diagnostics"),
+        h("button", { class: "btn btn--quiet", type: "button", onClick: checkUpdateStatus }, "Check for updates")
+      )
     ]);
 
     container.replaceChildren(
@@ -184,6 +191,46 @@ const screen = {
         toast({ message: "Daemon responded." });
       } catch { toast({ message: "Daemon didn't respond." }); }
     }
+
+    async function restartDaemon() {
+      try {
+        await request("/api/daemon/restart", { method: "POST" });
+        toast({ message: "Daemon is restarting..." });
+      } catch {
+        toast({ message: "Couldn't send restart command." });
+      }
+    }
+
+    async function checkUpdateStatus() {
+      versionStatusSlot.textContent = "Checking GitHub...";
+      try {
+        const res = await fetch("https://api.github.com/repos/umerhammaz/Mentions/releases/latest", {
+          headers: { Accept: "application/vnd.github.v3+json" },
+        });
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        const latestTag = (data.tag_name || "").replace(/^v/, "");
+        const current = (state.health?.daemonVersion || "").replace(/^v/, "");
+        if (latestTag && current && latestTag !== current) {
+          versionStatusSlot.replaceChildren(
+            h("span", { style: { color: "var(--warning)", fontWeight: "600" } }, `v${latestTag} available (current: v${current})`),
+            h("a", {
+              href: "https://github.com/umerhammaz/Mentions/releases/latest/download/mentions-daemon.exe",
+              target: "_blank",
+              rel: "noopener",
+              class: "btn btn--quiet",
+              style: { marginLeft: "8px", height: "24px", paddingInline: "8px", display: "inline-flex" },
+            }, "Download v" + latestTag)
+          );
+        } else {
+          versionStatusSlot.textContent = `Up to date (v${current || latestTag})`;
+        }
+      } catch {
+        versionStatusSlot.textContent = "Could not reach GitHub.";
+      }
+    }
+
+    checkUpdateStatus();
 
     async function exportJSON() {
       try {

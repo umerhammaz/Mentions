@@ -104,7 +104,7 @@ fn handle_request(mut req: Request, state: Arc<Mutex<AppState>>, ws_hub: WsHub) 
             &origin,
             Some(json!({
                 "apiVersion": "1.0",
-                "daemonVersion": "0.1.0",
+                "daemonVersion": env!("CARGO_PKG_VERSION"),
                 "hookActive": !s.settings.paused,
                 "paused": s.settings.paused,
                 "requiresPairing": s.tokens.is_empty() || !is_authed,
@@ -515,6 +515,15 @@ fn handle_request(mut req: Request, state: Arc<Mutex<AppState>>, ws_hub: WsHub) 
         s.tokens.clear();
         s.save_tokens();
         let _ = send_json(req, 204, &origin, None);
+        return;
+    }
+
+    if path == "/api/daemon/restart" && *req.method() == Method::Post {
+        let _ = send_json(req, 200, &origin, Some(json!({ "restarting": true })));
+        std::thread::spawn(|| {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            crate::restart_daemon();
+        });
         return;
     }
 

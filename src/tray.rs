@@ -12,6 +12,7 @@ static TRAY_CTX: OnceLock<TrayContext> = OnceLock::new();
 
 #[cfg(windows)]
 const WM_TRAYICON: u32 = windows_sys::Win32::UI::WindowsAndMessaging::WM_APP + 1;
+const ID_VERSION: usize = 1000;
 const ID_OPEN: usize = 1001;
 const ID_OPEN_LOCAL: usize = 1005;
 const ID_PAIR: usize = 1002;
@@ -49,10 +50,10 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu,
-        DispatchMessageW, GetCursorPos, GetMessageW, LoadIconW, PostQuitMessage, RegisterClassW,
-        SetForegroundWindow, TrackPopupMenu, TranslateMessage, CW_USEDEFAULT, IDI_APPLICATION,
-        MF_SEPARATOR, MF_STRING, MSG, TPM_BOTTOMALIGN, TPM_LEFTALIGN, WM_COMMAND, WM_DESTROY,
-        WM_LBUTTONDBLCLK, WM_RBUTTONUP, WNDCLASSW,
+        DispatchMessageW, GetCursorPos, GetMessageW, PostQuitMessage, RegisterClassW,
+        SetForegroundWindow, TrackPopupMenu, TranslateMessage, CW_USEDEFAULT,
+        MF_DISABLED, MF_GRAYED, MF_SEPARATOR, MF_STRING, MSG, TPM_BOTTOMALIGN, TPM_LEFTALIGN,
+        WM_COMMAND, WM_DESTROY, WM_LBUTTONDBLCLK, WM_RBUTTONUP, WNDCLASSW,
     };
 
     let _ = TRAY_CTX.set(TrayContext { state, ws_hub });
@@ -116,6 +117,8 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
             return;
         }
 
+        let ver_str = format!("Mentions v{}\0", env!("CARGO_PKG_VERSION"));
+        let ver_lbl: Vec<u16> = ver_str.encode_utf16().collect();
         let open_lbl: Vec<u16> = "Open Web Controller\0".encode_utf16().collect();
         let local_lbl: Vec<u16> = "Open Local Controller (Offline)\0".encode_utf16().collect();
         let pair_lbl: Vec<u16> = format!("Pair Browser (Code: {})\0", code)
@@ -129,6 +132,8 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
         let restart_lbl: Vec<u16> = "Restart Mentions\0".encode_utf16().collect();
         let quit_lbl: Vec<u16> = "Quit Mentions\0".encode_utf16().collect();
 
+        AppendMenuW(menu, MF_STRING | MF_DISABLED | MF_GRAYED, ID_VERSION, ver_lbl.as_ptr());
+        AppendMenuW(menu, MF_SEPARATOR, 0, std::ptr::null());
         AppendMenuW(menu, MF_STRING, ID_OPEN, open_lbl.as_ptr());
         AppendMenuW(menu, MF_STRING, ID_OPEN_LOCAL, local_lbl.as_ptr());
         AppendMenuW(menu, MF_STRING, ID_PAIR, pair_lbl.as_ptr());
@@ -217,10 +222,7 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
         let hinstance = GetModuleHandleW(std::ptr::null());
         let class_name: Vec<u16> = "MentionsTrayWindowClass\0".encode_utf16().collect();
 
-        let mut app_icon = LoadIconW(hinstance, 1 as *const u16);
-        if app_icon.is_null() {
-            app_icon = LoadIconW(std::ptr::null_mut(), IDI_APPLICATION);
-        }
+        let app_icon = create_icon_from_png(include_bytes!("../assets/mentions_icon.png"));
 
         let wc = WNDCLASSW {
             style: 0,
@@ -259,7 +261,8 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
         nid.uCallbackMessage = WM_TRAYICON;
         nid.hIcon = app_icon;
 
-        let tip: Vec<u16> = "Mentions · Active\0".encode_utf16().collect();
+        let tip_str = format!("Mentions v{} · Active\0", env!("CARGO_PKG_VERSION"));
+        let tip: Vec<u16> = tip_str.encode_utf16().collect();
         for (i, &ch) in tip.iter().take(nid.szTip.len()).enumerate() {
             nid.szTip[i] = ch;
         }
@@ -273,6 +276,29 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
         }
 
         Shell_NotifyIconW(NIM_DELETE, &nid);
+    }
+}
+
+#[cfg(windows)]
+unsafe fn create_icon_from_png(bytes: &[u8]) -> windows_sys::Win32::UI::WindowsAndMessaging::HICON {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        CreateIconFromResourceEx, LoadIconW, IDI_APPLICATION, LR_DEFAULTCOLOR,
+    };
+
+    let icon = CreateIconFromResourceEx(
+        bytes.as_ptr(),
+        bytes.len() as u32,
+        1,
+        0x00030000,
+        32,
+        32,
+        LR_DEFAULTCOLOR,
+    );
+
+    if icon.is_null() {
+        LoadIconW(std::ptr::null_mut(), IDI_APPLICATION)
+    } else {
+        icon
     }
 }
 
