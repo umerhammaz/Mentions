@@ -1,0 +1,85 @@
+{
+  "v": 2,
+  "id": "zc_mwdmpnqx_bnl7",
+  "sid": "s_mwdlloat_dzz6",
+  "repo": "umerhammaz/mentions",
+  "ts": 1794492853822,
+  "sha": "6f4fc73fb07da2b98b11bab16b08ee6b954cf033",
+  "branch": "main",
+  "delivery": "direct",
+  "msgSubj": "feat(sync): Synchronized 6 file(s) across 1 prompt turn(s)",
+  "msgHash": "34d4f4a6a038524a",
+  "files": [
+    [
+      "assets/mentions_icon.png",
+      "a",
+      "man",
+      1,
+      0
+    ],
+    [
+      "assets/mentions_logo.png",
+      "a",
+      "man",
+      1,
+      0
+    ],
+    [
+      "index.html",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "404.html",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/css/layout.css",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "src/server.rs",
+      "m",
+      "ai",
+      1,
+      0
+    ]
+  ],
+  "sum": {
+    "files": 6,
+    "add": 2,
+    "mod": 4,
+    "del": 0,
+    "src": {
+      "man": 2,
+      "ai": 4
+    }
+  },
+  "warn": {
+    "quarantine": 0,
+    "halluc": 0,
+    "secret": 0,
+    "runtime": 0,
+    "override": false
+  },
+  "safety": {
+    "canary": "8/8",
+    "vault": "persistent"
+  },
+  "base": {
+    "gen": 2,
+    "anc": "T",
+    "race": 0
+  },
+  "verify": 1,
+  "ms": 4639,
+  "hash": "451abe8003bdce3d"
+}
