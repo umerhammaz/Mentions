@@ -639,6 +639,9 @@ fn send_json(
 
 fn serve_embedded_ui(req: Request, path: &str) {
     let (content_type, bytes): (&[u8], &[u8]) = match path {
+        "/favicon.ico" => (&b"image/png"[..], include_bytes!("../assets/mentions_icon.png")),
+        "/assets/mentions_icon.png" => (&b"image/png"[..], include_bytes!("../assets/mentions_icon.png")),
+        "/assets/mentions_logo.png" => (&b"image/png"[..], include_bytes!("../assets/mentions_logo.png")),
         "/404.html" => (&b"text/html; charset=utf-8"[..], include_bytes!("../404.html")),
         "/assets/icons.svg" => (&b"image/svg+xml"[..], include_bytes!("../assets/icons.svg")),
         "/assets/css/tokens.css" => (&b"text/css; charset=utf-8"[..], include_bytes!("../assets/css/tokens.css")),

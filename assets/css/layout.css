@@ -28,10 +28,25 @@
   }
 
   .rail__brand {
-    padding-inline: var(--space-3);
-    height: 36px;
+    padding-inline: var(--space-2);
     display: flex;
     align-items: center;
+  }
+
+  .rail__brand-link {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    text-decoration: none;
+  }
+
+  .rail__logo {
+    display: block;
+    width: 100%;
+    max-width: 170px;
+    height: auto;
+    aspect-ratio: 300 / 60;
+    object-fit: contain;
   }
 
   .appbar__title {
