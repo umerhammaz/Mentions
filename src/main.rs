@@ -18,6 +18,9 @@ pub const VERCEL_CONTROLLER_URL: &str = "https://mentions-blond.vercel.app";
 pub const CONTROLLER_URL: &str = CF_CONTROLLER_URL;
 
 fn main() {
+    #[cfg(windows)]
+    tray::install_shortcuts_if_needed();
+
     let state = Arc::new(Mutex::new(AppState::load()));
     let port = {
         let s = state.lock().unwrap();
@@ -52,6 +55,13 @@ fn acquire_or_replace_instance(port: u16) -> Option<InstanceGuard> {
         }
     }
     None
+}
+
+pub fn restart_daemon() {
+    if let Ok(exe) = std::env::current_exe() {
+        let _ = std::process::Command::new(exe).spawn();
+        std::process::exit(0);
+    }
 }
 
 fn request_previous_shutdown(port: u16) {

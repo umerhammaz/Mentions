@@ -1,4 +1,3 @@
-#![allow(unused_imports)]
 use crate::server::{self as _server, WsHub};
 use crate::store::{self, AppState};
 use serde_json::json;
@@ -13,11 +12,11 @@ static TRAY_CTX: OnceLock<TrayContext> = OnceLock::new();
 
 #[cfg(windows)]
 const WM_TRAYICON: u32 = windows_sys::Win32::UI::WindowsAndMessaging::WM_APP + 1;
-const ID_OPEN_CF: usize = 1001;
-const ID_OPEN_VERCEL: usize = 1006;
+const ID_OPEN: usize = 1001;
 const ID_OPEN_LOCAL: usize = 1005;
 const ID_PAIR: usize = 1002;
 const ID_TOGGLE_PAUSE: usize = 1003;
+const ID_RESTART: usize = 1006;
 const ID_QUIT: usize = 1004;
 
 pub fn open_browser(url: &str) {
@@ -77,11 +76,11 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
             WM_COMMAND => {
                 let cmd = wparam & 0xFFFF;
                 match cmd {
-                    ID_OPEN_CF => launch_controller_for(super::CF_CONTROLLER_URL),
-                    ID_OPEN_VERCEL => launch_controller_for(super::VERCEL_CONTROLLER_URL),
+                    ID_OPEN => launch_controller(),
                     ID_OPEN_LOCAL => launch_local_controller(),
                     ID_PAIR => launch_pairing(),
                     ID_TOGGLE_PAUSE => toggle_pause(),
+                    ID_RESTART => crate::restart_daemon(),
                     ID_QUIT => {
                         if let Some(ctx) = TRAY_CTX.get() {
                             ctx.ws_hub.broadcast(&json!({ "type": "daemon.stopping" }));
@@ -117,9 +116,8 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
             return;
         }
 
-        let cf_lbl: Vec<u16> = "Open Controller (Cloudflare)\0".encode_utf16().collect();
-        let vercel_lbl: Vec<u16> = "Open Controller (Vercel)\0".encode_utf16().collect();
-        let local_lbl: Vec<u16> = "Open Local Controller (127.0.0.1)\0".encode_utf16().collect();
+        let open_lbl: Vec<u16> = "Open Web Controller\0".encode_utf16().collect();
+        let local_lbl: Vec<u16> = "Open Local Controller (Offline)\0".encode_utf16().collect();
         let pair_lbl: Vec<u16> = format!("Pair Browser (Code: {})\0", code)
             .encode_utf16()
             .collect();
@@ -128,15 +126,15 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
         } else {
             "Pause Expansion\0".encode_utf16().collect()
         };
+        let restart_lbl: Vec<u16> = "Restart Mentions\0".encode_utf16().collect();
         let quit_lbl: Vec<u16> = "Quit Mentions\0".encode_utf16().collect();
 
-        AppendMenuW(menu, MF_STRING, ID_OPEN_CF, cf_lbl.as_ptr());
-        AppendMenuW(menu, MF_STRING, ID_OPEN_VERCEL, vercel_lbl.as_ptr());
+        AppendMenuW(menu, MF_STRING, ID_OPEN, open_lbl.as_ptr());
         AppendMenuW(menu, MF_STRING, ID_OPEN_LOCAL, local_lbl.as_ptr());
-        AppendMenuW(menu, MF_SEPARATOR, 0, std::ptr::null());
         AppendMenuW(menu, MF_STRING, ID_PAIR, pair_lbl.as_ptr());
         AppendMenuW(menu, MF_STRING, ID_TOGGLE_PAUSE, pause_lbl.as_ptr());
         AppendMenuW(menu, MF_SEPARATOR, 0, std::ptr::null());
+        AppendMenuW(menu, MF_STRING, ID_RESTART, restart_lbl.as_ptr());
         AppendMenuW(menu, MF_STRING, ID_QUIT, quit_lbl.as_ptr());
 
         let mut pt = std::mem::zeroed();
@@ -154,26 +152,19 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
         DestroyMenu(menu);
     }
 
-    fn current_code_and_port(ctx: &TrayContext) -> (bool, String, u16) {
-        let mut s = ctx.state.lock().unwrap();
-        if store::now_secs() > s.pair_expires_at {
-            s.refresh_pair_code();
-        }
-        (s.tokens.is_empty(), s.pair_code.clone(), s.settings.port)
-    }
-
     fn launch_controller() {
-        launch_controller_for(super::CONTROLLER_URL);
-    }
-
-    fn launch_controller_for(base: &str) {
+        let base = super::CONTROLLER_URL;
         let Some(ctx) = TRAY_CTX.get() else {
             open_browser(base);
             return;
         };
-        let (needs_pair, code, port) = current_code_and_port(ctx);
+        let (needs_pair, code, port) = {
+            let mut s = ctx.state.lock().unwrap();
+            let code = s.refresh_pair_code();
+            (s.tokens.is_empty(), code, s.settings.port)
+        };
         if needs_pair {
-            let url = format!("{}/?code={}&port={}", base, code, port);
+            let url = format!("{}/pair?code={}&port={}", base, code, port);
             open_browser(&url);
         } else if port != 31415 {
             let url = format!("{}/?port={}", base, port);
@@ -188,8 +179,11 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
             open_browser("http://127.0.0.1:31415");
             return;
         };
-        let (_, code, port) = current_code_and_port(ctx);
-        let url = format!("http://127.0.0.1:{}/?code={}&port={}", port, code, port);
+        let (code, port) = {
+            let mut s = ctx.state.lock().unwrap();
+            (s.refresh_pair_code(), s.settings.port)
+        };
+        let url = format!("http://127.0.0.1:{}/pair?code={}&port={}", port, code, port);
         open_browser(&url);
     }
 
@@ -197,8 +191,11 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
         let Some(ctx) = TRAY_CTX.get() else {
             return;
         };
-        let (_, code, port) = current_code_and_port(ctx);
-        let url = format!("{}/?code={}&port={}", super::CONTROLLER_URL, code, port);
+        let (code, port) = {
+            let mut s = ctx.state.lock().unwrap();
+            (s.refresh_pair_code(), s.settings.port)
+        };
+        let url = format!("{}/pair?code={}&port={}", super::CONTROLLER_URL, code, port);
         open_browser(&url);
     }
 
@@ -220,13 +217,18 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
         let hinstance = GetModuleHandleW(std::ptr::null());
         let class_name: Vec<u16> = "MentionsTrayWindowClass\0".encode_utf16().collect();
 
+        let mut app_icon = LoadIconW(hinstance, 1 as *const u16);
+        if app_icon.is_null() {
+            app_icon = LoadIconW(std::ptr::null_mut(), IDI_APPLICATION);
+        }
+
         let wc = WNDCLASSW {
             style: 0,
             lpfnWndProc: Some(wnd_proc),
             cbClsExtra: 0,
             cbWndExtra: 0,
             hInstance: hinstance,
-            hIcon: LoadIconW(std::ptr::null_mut(), IDI_APPLICATION),
+            hIcon: app_icon,
             hCursor: std::ptr::null_mut(),
             hbrBackground: std::ptr::null_mut(),
             lpszMenuName: std::ptr::null(),
@@ -255,7 +257,7 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
         nid.uID = 1;
         nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
         nid.uCallbackMessage = WM_TRAYICON;
-        nid.hIcon = LoadIconW(std::ptr::null_mut(), IDI_APPLICATION);
+        nid.hIcon = app_icon;
 
         let tip: Vec<u16> = "Mentions · Active\0".encode_utf16().collect();
         for (i, &ch) in tip.iter().take(nid.szTip.len()).enumerate() {
@@ -274,9 +276,121 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
     }
 }
 
+#[cfg(windows)]
+pub fn install_shortcuts_if_needed() {
+    let Ok(current_exe) = std::env::current_exe() else {
+        return;
+    };
+
+    let user_profile = match std::env::var("USERPROFILE") {
+        Ok(p) => std::path::PathBuf::from(p),
+        Err(_) => return,
+    };
+
+    let appdata = match std::env::var("APPDATA") {
+        Ok(p) => std::path::PathBuf::from(p),
+        Err(_) => return,
+    };
+
+    let desktop_shortcut = user_profile.join("Desktop").join("Mentions.lnk");
+    let start_menu_shortcut = appdata
+        .join("Microsoft")
+        .join("Windows")
+        .join("Start Menu")
+        .join("Programs")
+        .join("Mentions.lnk");
+
+    if !desktop_shortcut.exists() {
+        create_windows_shortcut(&current_exe, &desktop_shortcut);
+    }
+    if !start_menu_shortcut.exists() {
+        create_windows_shortcut(&current_exe, &start_menu_shortcut);
+    }
+}
+
+#[cfg(windows)]
+fn create_windows_shortcut(target_exe: &std::path::Path, link_path: &std::path::Path) {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::System::Com::{
+        CoCreateInstance, CoInitialize, CoUninitialize, CLSCTX_INPROC_SERVER,
+    };
+    use windows_sys::Win32::UI::Shell::{IShellLinkW, IPersistFile};
+
+    const CLSID_SHELL_LINK: windows_sys::core::GUID = windows_sys::core::GUID {
+        data1: 0x00021401,
+        data2: 0x0000,
+        data3: 0x0000,
+        data4: [0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46],
+    };
+
+    const IID_ISHELL_LINK_W: windows_sys::core::GUID = windows_sys::core::GUID {
+        data1: 0x000214F9,
+        data2: 0x0000,
+        data3: 0x0000,
+        data4: [0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46],
+    };
+
+    const IID_IPERSIST_FILE: windows_sys::core::GUID = windows_sys::core::GUID {
+        data1: 0x0000010B,
+        data2: 0x0000,
+        data3: 0x0000,
+        data4: [0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46],
+    };
+
+    unsafe {
+        CoInitialize(std::ptr::null_mut());
+
+        let mut shell_link_ptr: *mut std::ffi::c_void = std::ptr::null_mut();
+        if CoCreateInstance(
+            &CLSID_SHELL_LINK,
+            std::ptr::null_mut(),
+            CLSCTX_INPROC_SERVER,
+            &IID_ISHELL_LINK_W,
+            &mut shell_link_ptr,
+        ) == 0
+        {
+            let shell_link = &*(shell_link_ptr as *mut IShellLinkW);
+
+            let mut target_w: Vec<u16> = target_exe.as_os_str().encode_wide().collect();
+            target_w.push(0);
+            (shell_link.lpVtbl.SetPath)(shell_link_ptr as _, target_w.as_ptr());
+
+            if let Some(parent) = target_exe.parent() {
+                let mut dir_w: Vec<u16> = parent.as_os_str().encode_wide().collect();
+                dir_w.push(0);
+                (shell_link.lpVtbl.SetWorkingDirectory)(shell_link_ptr as _, dir_w.as_ptr());
+            }
+
+            let desc: Vec<u16> = "Mentions Text Expansion\0".encode_utf16().collect();
+            (shell_link.lpVtbl.SetDescription)(shell_link_ptr as _, desc.as_ptr());
+
+            let mut persist_file_ptr: *mut std::ffi::c_void = std::ptr::null_mut();
+            if (shell_link.lpVtbl.QueryInterface)(
+                shell_link_ptr as _,
+                &IID_IPERSIST_FILE,
+                &mut persist_file_ptr,
+            ) == 0
+            {
+                let persist_file = &*(persist_file_ptr as *mut IPersistFile);
+                let mut link_w: Vec<u16> = link_path.as_os_str().encode_wide().collect();
+                link_w.push(0);
+                let _ = (persist_file.lpVtbl.Save)(persist_file_ptr as _, link_w.as_ptr(), 1);
+                (persist_file.lpVtbl.Release)(persist_file_ptr as _);
+            }
+
+            (shell_link.lpVtbl.Release)(shell_link_ptr as _);
+        }
+
+        CoUninitialize();
+    }
+}
+
 #[cfg(not(windows))]
 pub fn run_tray_loop(_state: Arc<Mutex<AppState>>, _ws_hub: WsHub) {
     loop {
         std::thread::sleep(std::time::Duration::from_secs(3600));
     }
 }
+
+#[cfg(not(windows))]
+pub fn install_shortcuts_if_needed() {}

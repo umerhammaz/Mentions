@@ -479,6 +479,12 @@ fn handle_request(mut req: Request, state: Arc<Mutex<AppState>>, ws_hub: WsHub) 
             obj.insert("restartRequired".to_string(), json!(restart_required));
         }
         let _ = send_json(req, 200, &origin, Some(resp));
+        if restart_required {
+            std::thread::spawn(|| {
+                std::thread::sleep(std::time::Duration::from_millis(400));
+                crate::restart_daemon();
+            });
+        }
         return;
     }
 
