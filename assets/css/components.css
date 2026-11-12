@@ -9,9 +9,9 @@
     color: var(--on-surface-variant);
     border: 0;
   }
-  .chip__dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+  .chip__dot { width: 6px; height: 6px; border-radius: 0; flex: none; }
   .chip--success { color: var(--on-surface-variant); }
-  .chip--success .chip__dot { background: var(--success); box-shadow: 0 0 6px var(--success); }
+  .chip--success .chip__dot { background: var(--success); }
   .chip--warning { color: var(--on-surface-variant); }
   .chip--warning .chip__dot { background: var(--warning); }
   .chip--danger { color: var(--on-surface-variant); }
