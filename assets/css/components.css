@@ -120,7 +120,7 @@
     position: absolute; left: var(--space-3); top: 50%; transform: translateY(-50%);
     font-family: var(--font-mono); color: var(--on-surface-variant); pointer-events: none;
   }
-  .input-affix .input { padding-left: 28px; font-family: var(--font-mono); }
+  .input-affix .input { padding-left: 32px; font-family: var(--font-mono); }
 
   .switch { display: inline-flex; align-items: center; gap: var(--space-3); cursor: pointer; }
   .switch input { position: absolute; opacity: 0; pointer-events: none; }
@@ -129,6 +129,7 @@
     background: var(--surface-container-high);
     border: var(--border-structure);
     position: relative; transition: background var(--dur-2) var(--ease-standard);
+    flex-shrink: 0;
   }
   .switch__track::after {
     content: ""; position: absolute; top: 2px; left: 2px;
@@ -173,7 +174,7 @@
   .table td {
     padding: var(--space-3) var(--space-4);
     border-bottom: var(--border-structure);
-    vertical-align: top;
+    vertical-align: middle;
   }
   .table tbody tr:last-child td { border-bottom: 0; }
   .table tbody tr:hover { background: color-mix(in oklab, var(--on-surface) 4%, transparent); }
@@ -188,7 +189,7 @@
 
   .rows { display: flex; flex-direction: column; gap: var(--space-2); }
   .row {
-    display: flex; align-items: flex-start; gap: var(--space-3);
+    display: flex; align-items: center; gap: var(--space-3);
     padding: var(--space-3) var(--space-4);
     border: var(--border-structure);
     border-radius: var(--radius-container);

@@ -40,13 +40,16 @@
     flex-wrap: wrap;
   }
   .editor__tabs {
-    display: inline-flex; gap: 2px; padding: 2px;
+    display: inline-flex; align-items: center; gap: 2px; padding: 2px;
     background: var(--surface-container);
     border: var(--border-structure);
     border-radius: var(--radius-control);
+    height: 36px;
   }
   .editor__tab {
-    padding: 4px var(--space-3);
+    display: inline-flex; align-items: center;
+    height: 30px;
+    padding-inline: var(--space-3);
     border-radius: 6px;
     font-size: var(--fs-label);
     font-weight: 500;
@@ -76,7 +79,7 @@
   .settings__section:first-of-type { border-top: 0; padding-top: 0; }
   .settings__section-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
   .settings__status { color: var(--on-surface-variant); font-size: var(--fs-caption); font-variant-numeric: tabular-nums; }
-  .settings__row { display: flex; justify-content: space-between; gap: var(--space-4); align-items: flex-start; flex-wrap: wrap; }
+  .settings__row { display: flex; justify-content: space-between; gap: var(--space-4); align-items: center; flex-wrap: wrap; }
   .settings__row-text { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 2px; }
 
   .pair {

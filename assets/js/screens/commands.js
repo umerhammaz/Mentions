@@ -307,7 +307,7 @@ const routeScreen = {
               e.stopPropagation();
               toggleCommandEnabled(c);
             },
-            style: { height: "28px", paddingInline: "var(--space-2)" },
+            style: { height: "30px", paddingInline: "var(--space-2)" },
           },
             h("span", { "aria-hidden": "true", class: "table__status-dot", style: { background: c.enabled ? "var(--success)" : "var(--on-surface-variant)" } }),
             c.enabled ? "Enabled" : "Paused"
@@ -354,7 +354,7 @@ const routeScreen = {
                   h("button", {
                     type: "button",
                     class: "btn btn--quiet t-caption",
-                    style: { height: "24px", paddingInline: "var(--space-2)", display: "inline-flex", alignItems: "center", gap: "var(--space-2)" },
+                    style: { height: "28px", paddingInline: "var(--space-2)", display: "inline-flex", alignItems: "center", gap: "var(--space-2)" },
                     onClick: (e) => {
                       e.stopPropagation();
                       toggleCommandEnabled(c);
