@@ -1,4 +1,4 @@
-use crate::server::{self as _server, WsHub};
+use crate::server::WsHub;
 use crate::store::{self, AppState};
 use serde_json::json;
 use std::sync::{Arc, Mutex, OnceLock};
@@ -310,79 +310,17 @@ pub fn install_shortcuts_if_needed() {
 
 #[cfg(windows)]
 fn create_windows_shortcut(target_exe: &std::path::Path, link_path: &std::path::Path) {
-    use std::os::windows::ffi::OsStrExt;
-    use windows_sys::Win32::System::Com::{
-        CoCreateInstance, CoInitialize, CoUninitialize, CLSCTX_INPROC_SERVER,
-    };
-    use windows_sys::Win32::UI::Shell::{IShellLinkW, IPersistFile};
+    let script = format!(
+        "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('{}'); $s.TargetPath = '{}'; $s.WorkingDirectory = '{}'; $s.IconLocation = '{},0'; $s.Description = 'Mentions Text Expansion'; $s.Save()",
+        link_path.display(),
+        target_exe.display(),
+        target_exe.parent().map(|p| p.display().to_string()).unwrap_or_default(),
+        target_exe.display()
+    );
 
-    const CLSID_SHELL_LINK: windows_sys::core::GUID = windows_sys::core::GUID {
-        data1: 0x00021401,
-        data2: 0x0000,
-        data3: 0x0000,
-        data4: [0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46],
-    };
-
-    const IID_ISHELL_LINK_W: windows_sys::core::GUID = windows_sys::core::GUID {
-        data1: 0x000214F9,
-        data2: 0x0000,
-        data3: 0x0000,
-        data4: [0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46],
-    };
-
-    const IID_IPERSIST_FILE: windows_sys::core::GUID = windows_sys::core::GUID {
-        data1: 0x0000010B,
-        data2: 0x0000,
-        data3: 0x0000,
-        data4: [0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46],
-    };
-
-    unsafe {
-        CoInitialize(std::ptr::null_mut());
-
-        let mut shell_link_ptr: *mut std::ffi::c_void = std::ptr::null_mut();
-        if CoCreateInstance(
-            &CLSID_SHELL_LINK,
-            std::ptr::null_mut(),
-            CLSCTX_INPROC_SERVER,
-            &IID_ISHELL_LINK_W,
-            &mut shell_link_ptr,
-        ) == 0
-        {
-            let shell_link = &*(shell_link_ptr as *mut IShellLinkW);
-
-            let mut target_w: Vec<u16> = target_exe.as_os_str().encode_wide().collect();
-            target_w.push(0);
-            (shell_link.lpVtbl.SetPath)(shell_link_ptr as _, target_w.as_ptr());
-
-            if let Some(parent) = target_exe.parent() {
-                let mut dir_w: Vec<u16> = parent.as_os_str().encode_wide().collect();
-                dir_w.push(0);
-                (shell_link.lpVtbl.SetWorkingDirectory)(shell_link_ptr as _, dir_w.as_ptr());
-            }
-
-            let desc: Vec<u16> = "Mentions Text Expansion\0".encode_utf16().collect();
-            (shell_link.lpVtbl.SetDescription)(shell_link_ptr as _, desc.as_ptr());
-
-            let mut persist_file_ptr: *mut std::ffi::c_void = std::ptr::null_mut();
-            if (shell_link.lpVtbl.QueryInterface)(
-                shell_link_ptr as _,
-                &IID_IPERSIST_FILE,
-                &mut persist_file_ptr,
-            ) == 0
-            {
-                let persist_file = &*(persist_file_ptr as *mut IPersistFile);
-                let mut link_w: Vec<u16> = link_path.as_os_str().encode_wide().collect();
-                link_w.push(0);
-                let _ = (persist_file.lpVtbl.Save)(persist_file_ptr as _, link_w.as_ptr(), 1);
-                (persist_file.lpVtbl.Release)(persist_file_ptr as _);
-            }
-
-            (shell_link.lpVtbl.Release)(shell_link_ptr as _);
-        }
-
-        CoUninitialize();
-    }
+    let _ = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", &script])
+        .status();
 }
 
 #[cfg(not(windows))]
