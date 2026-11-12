@@ -4,30 +4,36 @@
     grid-template-columns: var(--rail-w) 1fr;
     grid-template-rows: var(--appbar-h) auto 1fr;
     grid-template-areas:
-      "appbar appbar"
-      "rail   banners"
+      "appbar banners"
+      "rail   main"
       "rail   main";
     min-height: 100vh;
   }
 
   .appbar {
     grid-area: appbar;
-    display: flex; align-items: center; gap: var(--space-3);
+    display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
     padding-inline: var(--space-4);
     height: var(--appbar-h);
-    border-bottom: var(--border-structure);
+    border-right: var(--border-structure);
     background: var(--surface);
     position: sticky; top: 0; z-index: 20;
   }
-  .appbar__title { font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 600; }
-  .appbar__status { flex: 1; display: flex; justify-content: center; }
+  .appbar__title { font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 600; letter-spacing: -0.01em; }
+  .appbar__status { display: flex; align-items: center; min-width: 0; }
 
   .rail {
     grid-area: rail;
     border-right: var(--border-structure);
-    padding: var(--space-3) var(--space-2);
-    display: flex; flex-direction: column; gap: var(--space-1);
+    padding: var(--space-2) var(--space-2) var(--space-3);
+    display: flex; flex-direction: column; justify-content: space-between; gap: var(--space-3);
     background: var(--surface);
+    position: sticky;
+    top: var(--appbar-h);
+    height: calc(100vh - var(--appbar-h));
+  }
+  .rail__nav {
+    display: flex; flex-direction: column; gap: var(--space-1);
   }
   .rail__link {
     display: flex; align-items: center; gap: var(--space-3);
@@ -43,7 +49,40 @@
     color: var(--on-surface);
   }
 
-  .banners { grid-area: banners; padding-inline: var(--space-6); padding-top: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); }
+  .rail__footer {
+    margin-top: auto;
+    padding-top: var(--space-3);
+    padding-inline: var(--space-2);
+    border-top: var(--border-structure);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .rail__status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    min-height: 28px;
+  }
+  .rail__pause-btn {
+    height: 26px;
+    padding-inline: var(--space-2);
+    font-size: var(--fs-caption);
+    color: var(--on-surface-variant);
+  }
+  .rail__pause-btn:hover {
+    color: var(--on-surface);
+  }
+  .rail__download-btn {
+    width: 100%;
+    justify-content: center;
+    height: 32px;
+    font-size: var(--fs-caption);
+    text-decoration: none;
+  }
+
+  .banners { grid-area: banners; padding-inline: var(--space-6); padding-top: var(--space-4); display: flex; flex-direction: column; gap: var(--space-2); }
   .banners:empty { padding: 0; }
 
   main { grid-area: main; padding: var(--space-6); min-width: 0; }
@@ -67,30 +106,48 @@
   @media (max-width: 959px) {
     body {
       grid-template-columns: 1fr;
-      grid-template-rows: var(--appbar-h) auto auto 1fr auto;
+      grid-template-rows: var(--appbar-h) auto 1fr auto;
       grid-template-areas:
         "appbar"
         "banners"
         "main"
-        "spacer"
         "rail";
+    }
+    .appbar {
+      border-right: 0;
+      border-bottom: var(--border-structure);
     }
     .rail {
       flex-direction: row;
+      align-items: center;
       border-right: 0;
       border-top: var(--border-structure);
       padding: var(--space-2);
-      position: sticky; bottom: 0; z-index: 20;
+      position: sticky; bottom: 0; top: auto;
+      height: auto;
+      z-index: 20;
       background: var(--surface);
     }
+    .rail__nav {
+      flex-direction: row;
+      flex: 1;
+    }
     .rail__link { flex: 1; justify-content: center; flex-direction: column; gap: 2px; font-size: var(--fs-caption); }
+    .rail__footer {
+      margin-top: 0;
+      padding-top: 0;
+      border-top: 0;
+      border-left: var(--border-structure);
+      padding-left: var(--space-3);
+    }
+    .rail__download-btn { display: none; }
     main { padding: var(--space-4); }
     .split { grid-template-columns: 1fr; }
     .banners { padding-inline: var(--space-4); }
   }
 
   @media (max-width: 479px) {
-    .appbar { padding-inline: var(--space-2); }
+    .appbar { padding-inline: var(--space-3); }
     main { padding: var(--space-3); }
   }
 }

@@ -13,8 +13,22 @@ import { h } from "./dom.js";
 import { announce } from "./a11y.js";
 
 const root = document.getElementById("main");
+const rail = document.querySelector(".rail");
+const statusEl = document.getElementById("status");
 const hookToggle = document.getElementById("hook-toggle");
 const downloadBtn = document.getElementById("download-app");
+
+if (rail && statusEl && !rail.contains(statusEl)) {
+  const navWrap = h("div", { class: "rail__nav" }, ...Array.from(rail.querySelectorAll(".rail__link")));
+  const statusRow = h("div", { class: "rail__status-row" }, statusEl, hookToggle);
+  if (hookToggle) hookToggle.classList.add("rail__pause-btn");
+  if (downloadBtn) {
+    downloadBtn.classList.add("rail__download-btn");
+    downloadBtn.textContent = "Download app";
+  }
+  const footer = h("div", { class: "rail__footer" }, statusRow, downloadBtn);
+  rail.replaceChildren(navWrap, footer);
+}
 
 hookToggle.addEventListener("click", async () => {
   const paused = !!state.health?.paused;

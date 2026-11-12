@@ -12,12 +12,12 @@ function chipFor(hState) {
   const labelMap = {
     unknown: "Checking...",
     connecting: "Checking...",
-    online: "Daemon online",
-    paused: "Expansion paused",
-    demo: "Demo mode",
-    offline: "Daemon offline",
+    online: "Active",
+    paused: "Paused",
+    demo: "Browser mode",
+    offline: "Offline",
     unpaired: "Not paired",
-    "version-mismatch": "Update required",
+    "version-mismatch": "Update needed",
   };
   const toneMap = {
     online: "success",

@@ -1,21 +1,22 @@
 @layer components {
   .chip {
     display: inline-flex; align-items: center; gap: var(--space-2);
-    padding: 4px var(--space-3);
-    border-radius: var(--radius-pill);
-    font-size: var(--fs-label); line-height: var(--lh-label);
-    background: var(--surface-container-high);
-    color: var(--on-surface);
-    border: var(--border-structure);
+    padding: 2px var(--space-2);
+    border-radius: var(--radius-control);
+    font-size: var(--fs-caption); line-height: var(--lh-caption);
+    font-weight: 500;
+    background: transparent;
+    color: var(--on-surface-variant);
+    border: 0;
   }
-  .chip__dot { width: 8px; height: 8px; border-radius: 50%; }
-  .chip--success { background: var(--success-container); color: var(--on-surface); border-color: transparent; }
-  .chip--success .chip__dot { background: var(--success); }
-  .chip--warning { background: var(--warning-container); border-color: transparent; }
+  .chip__dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+  .chip--success { color: var(--on-surface-variant); }
+  .chip--success .chip__dot { background: var(--success); box-shadow: 0 0 6px var(--success); }
+  .chip--warning { color: var(--on-surface-variant); }
   .chip--warning .chip__dot { background: var(--warning); }
-  .chip--danger { background: var(--danger-container); border-color: transparent; }
+  .chip--danger { color: var(--on-surface-variant); }
   .chip--danger .chip__dot { background: var(--danger); }
-  .chip--info { background: var(--info-container); border-color: transparent; }
+  .chip--info { color: var(--on-surface-variant); }
   .chip--info .chip__dot { background: var(--info); }
   .chip--neutral .chip__dot { background: var(--on-surface-variant); }
 

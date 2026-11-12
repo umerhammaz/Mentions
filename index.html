@@ -17,20 +17,26 @@
 
 <header class="appbar">
   <h1 class="appbar__title">Mentions</h1>
-  <div id="status" class="appbar__status" aria-live="polite"></div>
-  <a id="download-app" class="btn" href="https://github.com/umerhammaz/Mentions/releases/latest/download/mentions-daemon.exe" target="_blank" rel="noopener">Download for Windows</a>
-  <button id="hook-toggle" class="btn btn--quiet" hidden aria-pressed="false">Pause</button>
 </header>
 
 <nav class="rail" aria-label="Primary">
-  <a class="rail__link" href="/" data-nav="commands">
-    <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#list"/></svg>
-    <span>Commands</span>
-  </a>
-  <a class="rail__link" href="/settings" data-nav="settings">
-    <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#sliders"/></svg>
-    <span>Settings</span>
-  </a>
+  <div class="rail__nav">
+    <a class="rail__link" href="/" data-nav="commands">
+      <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#list"/></svg>
+      <span>Commands</span>
+    </a>
+    <a class="rail__link" href="/settings" data-nav="settings">
+      <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#sliders"/></svg>
+      <span>Settings</span>
+    </a>
+  </div>
+  <div class="rail__footer">
+    <div class="rail__status-row">
+      <div id="status" class="appbar__status" aria-live="polite"></div>
+      <button id="hook-toggle" class="btn btn--quiet rail__pause-btn" hidden aria-pressed="false">Pause</button>
+    </div>
+    <a id="download-app" class="btn rail__download-btn" href="https://github.com/umerhammaz/Mentions/releases/latest/download/mentions-daemon.exe" target="_blank" rel="noopener">Download app</a>
+  </div>
 </nav>
 
 <div id="banners" class="banners"></div>
