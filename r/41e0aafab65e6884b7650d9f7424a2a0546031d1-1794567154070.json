@@ -1,0 +1,133 @@
+{
+  "v": 2,
+  "id": "zc_mweuy6bw_6vhz",
+  "sid": "s_mweuy6bv_4e38",
+  "repo": "umerhammaz/mentions",
+  "ts": 1794567154070,
+  "sha": "41e0aafab65e6884b7650d9f7424a2a0546031d1",
+  "branch": "main",
+  "delivery": "direct",
+  "msgSubj": "feat(sync): Synchronized 13 file(s) across 2 prompt turn(s)",
+  "msgHash": "21ad6bde55362e2c",
+  "files": [
+    [
+      "src/store.rs",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "src/main.rs",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "src/tray.rs",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "src/injector.rs",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "src/suggest.rs",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "src/hook.rs",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "src/server.rs",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/js/store.js",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/js/ws.js",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/js/ui.js",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/css/screens.css",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/js/screens/commands.js",
+      "m",
+      "ai",
+      2,
+      0
+    ],
+    [
+      "assets/js/screens/editor.js",
+      "m",
+      "ai",
+      2,
+      0
+    ]
+  ],
+  "sum": {
+    "files": 13,
+    "add": 0,
+    "mod": 13,
+    "del": 0,
+    "src": {
+      "ai": 13
+    }
+  },
+  "warn": {
+    "quarantine": 0,
+    "halluc": 0,
+    "secret": 0,
+    "runtime": 0,
+    "override": false
+  },
+  "safety": {
+    "canary": "8/8",
+    "vault": "persistent"
+  },
+  "base": {
+    "gen": 0,
+    "anc": "T",
+    "race": 0
+  },
+  "verify": 1,
+  "ms": 12196,
+  "hash": "5634afcbb359e113"
+}
