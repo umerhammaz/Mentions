@@ -185,6 +185,40 @@ const screen = {
             )
           )
         )
+      ),
+      h("div", { class: "settings__row" },
+        h("div", { class: "settings__row-text" },
+          h("span", { class: "t-body" }, "Show suggestions while typing @"),
+          h("span", { class: "t-caption" }, "Opens a lightweight list near your cursor as you type @.")
+        ),
+        toggleSwitch(settings.suggestPopup !== false, (checked) => {
+          settings.suggestPopup = checked;
+          save({ suggestPopup: checked }, "expansion", status);
+        })
+      ),
+      h("div", { class: "settings__row" },
+        h("div", { class: "settings__row-text" },
+          h("span", { class: "t-body" }, "Suggestion accept key"),
+          h("span", { class: "t-caption" }, "Which key picks the highlighted suggestion.")
+        ),
+        h("div", { class: "segmented", role: "radiogroup", "aria-label": "Suggestion accept key" },
+          ...[
+            { id: "tab", label: "Tab" },
+            { id: "enter", label: "Enter" },
+            { id: "both", label: "Tab & Enter" },
+          ].map((opt) =>
+            h("label", null,
+              h("input", {
+                type: "radio",
+                name: "suggestAcceptKey",
+                value: opt.id,
+                checked: (settings.suggestAcceptKey || "both") === opt.id,
+                onchange: () => { settings.suggestAcceptKey = opt.id; save({ suggestAcceptKey: opt.id }, "expansion", status); },
+              }),
+              h("span", null, opt.label)
+            )
+          )
+        )
       )
     ]);
 

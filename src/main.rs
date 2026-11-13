@@ -4,6 +4,7 @@ mod hook;
 mod injector;
 mod server;
 mod store;
+mod suggest;
 mod tray;
 
 use std::io::Write;
@@ -37,6 +38,7 @@ fn main() {
 
     let ws_hub = server::WsHub::new();
 
+    suggest::start_suggest_engine();
     hook::start_hook_engine(Arc::clone(&state));
     server::start_http_server(Arc::clone(&state), ws_hub.clone());
     tray::run_tray_loop(state, ws_hub);

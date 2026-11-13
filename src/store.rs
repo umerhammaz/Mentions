@@ -30,6 +30,18 @@ pub struct Settings {
     #[serde(rename = "statsEnabled")]
     pub stats_enabled: bool,
     pub paused: bool,
+    #[serde(rename = "suggestPopup", default = "default_suggest_popup")]
+    pub suggest_popup: bool,
+    #[serde(rename = "suggestAcceptKey", default = "default_suggest_accept_key")]
+    pub suggest_accept_key: String,
+}
+
+fn default_suggest_popup() -> bool {
+    true
+}
+
+fn default_suggest_accept_key() -> String {
+    "both".to_string()
 }
 
 impl Default for Settings {
@@ -42,6 +54,8 @@ impl Default for Settings {
             autostart: false,
             stats_enabled: false,
             paused: false,
+            suggest_popup: true,
+            suggest_accept_key: "both".to_string(),
         }
     }
 }

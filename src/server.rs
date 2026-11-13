@@ -476,6 +476,14 @@ fn handle_request(mut req: Request, state: Arc<Mutex<AppState>>, ws_hub: WsHub) 
         if let Some(st) = body.get("statsEnabled").and_then(|v| v.as_bool()) {
             s.settings.stats_enabled = st;
         }
+        if let Some(sp) = body.get("suggestPopup").and_then(|v| v.as_bool()) {
+            s.settings.suggest_popup = sp;
+        }
+        if let Some(ak) = body.get("suggestAcceptKey").and_then(|v| v.as_str()) {
+            if matches!(ak, "tab" | "enter" | "both") {
+                s.settings.suggest_accept_key = ak.to_string();
+            }
+        }
 
         s.save_settings();
         crate::hook::refresh_hook_snapshot(&s);
