@@ -1,145 +1,53 @@
-#![allow(unused_imports)]
 use crate::injector::{self, SELF_STAMP};
-use crate::store::{self as _store, AppState};
-use std::sync::mpsc::{self, Sender};
+use crate::store::AppState;
 use std::sync::{Arc, Mutex, OnceLock};
-use std::thread;
 
-#[derive(Debug)]
-enum InputSignal {
-    Key {
-        vk: u32,
-        scan: u32,
-        ch: Option<char>,
-        ctrl_or_alt: bool,
-    },
-    ResetBuffer,
+#[derive(Clone, Default)]
+struct HookSnapshot {
+    paused: bool,
+    terminator: String,
+    restore_clipboard: bool,
+    injection_fallback: String,
+    commands: Vec<(String, String)>,
 }
 
-static SIGNAL_TX: OnceLock<Sender<InputSignal>> = OnceLock::new();
+static HOOK_SNAPSHOT: OnceLock<Mutex<Arc<HookSnapshot>>> = OnceLock::new();
 
 pub fn start_hook_engine(state: Arc<Mutex<AppState>>) {
-    let (tx, rx) = mpsc::channel::<InputSignal>();
-    let _ = SIGNAL_TX.set(tx);
-
-    thread::spawn(move || {
-        run_brain_loop(rx, state);
-    });
+    {
+        let s = state.lock().unwrap();
+        refresh_hook_snapshot(&s);
+    }
 
     #[cfg(windows)]
-    thread::spawn(|| {
+    std::thread::spawn(|| {
         run_windows_ear_loop();
     });
 }
 
-fn run_brain_loop(rx: mpsc::Receiver<InputSignal>, state: Arc<Mutex<AppState>>) {
-    let mut buffer = String::with_capacity(64);
-    let mut last_hwnd: isize = 0;
+pub fn refresh_hook_snapshot(state: &AppState) {
+    let commands = state
+        .commands
+        .iter()
+        .filter(|c| c.enabled)
+        .map(|c| (c.trigger.to_ascii_lowercase(), c.text.clone()))
+        .collect();
 
-    while let Ok(sig) = rx.recv() {
-        #[cfg(windows)]
-        {
-            let cur_hwnd = unsafe {
-                windows_sys::Win32::UI::WindowsAndMessaging::GetForegroundWindow() as isize
-            };
-            if cur_hwnd != last_hwnd {
-                buffer.clear();
-                last_hwnd = cur_hwnd;
-            }
-        }
+    let next = Arc::new(HookSnapshot {
+        paused: state.settings.paused,
+        terminator: state.settings.terminator.clone(),
+        restore_clipboard: state.settings.restore_clipboard,
+        injection_fallback: state.settings.injection_fallback.clone(),
+        commands,
+    });
 
-        match sig {
-            InputSignal::ResetBuffer => {
-                buffer.clear();
-            }
-            InputSignal::Key {
-                vk,
-                ch,
-                ctrl_or_alt,
-                ..
-            } => {
-                if ctrl_or_alt {
-                    buffer.clear();
-                    continue;
-                }
-
-                if vk == 0x08 {
-                    buffer.pop();
-                    continue;
-                }
-
-                if is_navigation_key(vk) {
-                    buffer.clear();
-                    continue;
-                }
-
-                let (paused, terminator) = {
-                    let s = state.lock().unwrap();
-                    (s.settings.paused, s.settings.terminator.clone())
-                };
-
-                if paused {
-                    buffer.clear();
-                    continue;
-                }
-
-                if is_terminator_key(vk, &terminator) {
-                    if let Some(at_idx) = buffer.rfind('@') {
-                        let candidate = &buffer[at_idx..];
-                        if candidate.len() >= 2 && candidate.len() <= 32 {
-                            let matched = {
-                                let s = state.lock().unwrap();
-                                s.commands
-                                    .iter()
-                                    .find(|c| {
-                                        c.enabled && c.trigger.eq_ignore_ascii_case(candidate)
-                                    })
-                                    .map(|c| {
-                                        (
-                                            c.text.clone(),
-                                            s.settings.restore_clipboard,
-                                            s.settings.injection_fallback.clone(),
-                                        )
-                                    })
-                            };
-
-                            if let Some((text, restore_clip, fallback)) = matched {
-                                let erase_count = candidate.chars().count() + 1;
-                                buffer.clear();
-                                injector::expand_text(
-                                    erase_count,
-                                    &text,
-                                    restore_clip,
-                                    &fallback,
-                                );
-                                continue;
-                            }
-                        }
-                    }
-                    buffer.clear();
-                    continue;
-                }
-
-                if let Some(c) = ch {
-                    if c == '@' {
-                        buffer.clear();
-                        buffer.push('@');
-                    } else if !buffer.is_empty() {
-                        if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
-                            buffer.push(c.to_ascii_lowercase());
-                            if buffer.len() > 32 {
-                                buffer.clear();
-                            }
-                        } else {
-                            buffer.clear();
-                        }
-                    }
-                }
-            }
-        }
+    let cell = HOOK_SNAPSHOT.get_or_init(|| Mutex::new(Arc::clone(&next)));
+    if let Ok(mut guard) = cell.lock() {
+        *guard = next;
     }
 }
 
+#[cfg(windows)]
 fn is_terminator_key(vk: u32, terminator: &str) -> bool {
     match terminator {
         "enter" => vk == 0x0D,
@@ -148,6 +56,7 @@ fn is_terminator_key(vk: u32, terminator: &str) -> bool {
     }
 }
 
+#[cfg(windows)]
 fn is_navigation_key(vk: u32) -> bool {
     matches!(
         vk,
@@ -157,39 +66,159 @@ fn is_navigation_key(vk: u32) -> bool {
 
 #[cfg(windows)]
 fn run_windows_ear_loop() {
+    use std::cell::RefCell;
     use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        CallNextHookEx, DispatchMessageW, GetMessageW, SetWindowsHookExW, TranslateMessage,
-        UnhookWindowsHookEx, KBDLLHOOKSTRUCT, LLKHF_INJECTED, MSG, WH_KEYBOARD_LL, WH_MOUSE_LL,
-        WM_KEYDOWN, WM_LBUTTONDOWN, WM_MBUTTONDOWN, WM_RBUTTONDOWN, WM_SYSKEYDOWN,
+        CallNextHookEx, DispatchMessageW, GetForegroundWindow, GetMessageW, SetWindowsHookExW,
+        TranslateMessage, UnhookWindowsHookEx, KBDLLHOOKSTRUCT, LLKHF_INJECTED, MSG,
+        WH_KEYBOARD_LL, WH_MOUSE_LL, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN, WM_MBUTTONDOWN,
+        WM_RBUTTONDOWN, WM_SYSKEYDOWN, WM_SYSKEYUP,
     };
+
+    struct HookTrack {
+        buffer: String,
+        last_hwnd: isize,
+        swallowed_vk: Option<u32>,
+    }
+
+    thread_local! {
+        static TRACK: RefCell<HookTrack> = RefCell::new(HookTrack {
+            buffer: String::with_capacity(64),
+            last_hwnd: 0,
+            swallowed_vk: None,
+        });
+    }
 
     unsafe extern "system" fn keyboard_proc(
         code: i32,
         wparam: usize,
         lparam: isize,
     ) -> isize {
-        if code >= 0 && (wparam == WM_KEYDOWN as usize || wparam == WM_SYSKEYDOWN as usize) {
-            let kb = &*(lparam as *const KBDLLHOOKSTRUCT);
-            if kb.dwExtraInfo != SELF_STAMP && (kb.flags & LLKHF_INJECTED) == 0 {
-                if let Some(tx) = SIGNAL_TX.get() {
-                    let vk = kb.vkCode;
-                    if !is_modifier_vk(vk) {
-                        let ctrl_or_alt = is_ctrl_or_alt_pressed();
-                        let ch = if !ctrl_or_alt {
-                            translate_vk_to_char(vk, kb.scanCode)
-                        } else {
-                            None
-                        };
-                        let _ = tx.send(InputSignal::Key {
-                            vk,
-                            scan: kb.scanCode,
-                            ch,
-                            ctrl_or_alt,
-                        });
+        if code < 0 {
+            return CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam);
+        }
+
+        let kb = &*(lparam as *const KBDLLHOOKSTRUCT);
+        if kb.dwExtraInfo == SELF_STAMP || (kb.flags & LLKHF_INJECTED) != 0 {
+            return CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam);
+        }
+
+        let vk = kb.vkCode;
+        let is_up = wparam == WM_KEYUP as usize || wparam == WM_SYSKEYUP as usize;
+        if is_up {
+            let swallow = TRACK.with(|cell| {
+                let mut t = cell.borrow_mut();
+                if t.swallowed_vk == Some(vk) {
+                    t.swallowed_vk = None;
+                    true
+                } else {
+                    false
+                }
+            });
+            if swallow {
+                return 1;
+            }
+            return CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam);
+        }
+
+        let is_down = wparam == WM_KEYDOWN as usize || wparam == WM_SYSKEYDOWN as usize;
+        if !is_down {
+            return CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam);
+        }
+
+        let repeat_swallow = TRACK.with(|cell| cell.borrow().swallowed_vk == Some(vk));
+        if repeat_swallow {
+            return 1;
+        }
+
+        if is_modifier_vk(vk) {
+            return CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam);
+        }
+
+        let cur_hwnd = GetForegroundWindow() as isize;
+
+        let swallow = TRACK.with(|cell| {
+            let mut t = cell.borrow_mut();
+            t.swallowed_vk = None;
+            if cur_hwnd != t.last_hwnd {
+                t.buffer.clear();
+                t.last_hwnd = cur_hwnd;
+            }
+
+            if is_ctrl_or_alt_pressed() {
+                t.buffer.clear();
+                return false;
+            }
+
+            if vk == 0x08 {
+                t.buffer.pop();
+                return false;
+            }
+
+            if vk == 0xE5 || is_navigation_key(vk) {
+                t.buffer.clear();
+                return false;
+            }
+
+            let snap = HOOK_SNAPSHOT
+                .get()
+                .and_then(|m| m.try_lock().ok().map(|g| Arc::clone(&*g)));
+
+            let Some(snap) = snap else {
+                t.buffer.clear();
+                return false;
+            };
+
+            if snap.paused {
+                t.buffer.clear();
+                return false;
+            }
+
+            if is_terminator_key(vk, &snap.terminator) {
+                if let Some(at_idx) = t.buffer.rfind('@') {
+                    let candidate = &t.buffer[at_idx..];
+                    if candidate.len() >= 2 && candidate.len() <= 32 {
+                        if let Some((_, text)) =
+                            snap.commands.iter().find(|(trig, _)| trig == candidate)
+                        {
+                            let erase_count = candidate.chars().count();
+                            t.buffer.clear();
+                            t.swallowed_vk = Some(vk);
+                            injector::expand_text(
+                                erase_count,
+                                text,
+                                snap.restore_clipboard,
+                                &snap.injection_fallback,
+                                cur_hwnd,
+                            );
+                            return true;
+                        }
+                    }
+                }
+                t.buffer.clear();
+                return false;
+            }
+
+            if let Some(c) = translate_vk_to_char(vk, kb.scanCode, cur_hwnd) {
+                if c == '@' {
+                    t.buffer.clear();
+                    t.buffer.push('@');
+                } else if !t.buffer.is_empty() {
+                    if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                        t.buffer.push(c.to_ascii_lowercase());
+                        if t.buffer.len() > 32 {
+                            t.buffer.clear();
+                        }
+                    } else {
+                        t.buffer.clear();
                     }
                 }
             }
+            false
+        });
+
+        if swallow {
+            return 1;
         }
         CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam)
     }
@@ -200,9 +229,7 @@ fn run_windows_ear_loop() {
                 || wparam == WM_RBUTTONDOWN as usize
                 || wparam == WM_MBUTTONDOWN as usize)
         {
-            if let Some(tx) = SIGNAL_TX.get() {
-                let _ = tx.send(InputSignal::ResetBuffer);
-            }
+            TRACK.with(|cell| cell.borrow_mut().buffer.clear());
         }
         CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam)
     }
@@ -245,10 +272,13 @@ unsafe fn is_ctrl_or_alt_pressed() -> bool {
 }
 
 #[cfg(windows)]
-unsafe fn translate_vk_to_char(vk: u32, scan: u32) -> Option<char> {
+unsafe fn translate_vk_to_char(vk: u32, scan: u32, cur_hwnd: isize) -> Option<char> {
+    use windows_sys::Win32::Foundation::HWND;
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
         GetAsyncKeyState, GetKeyboardLayout, GetKeyboardState, ToUnicodeEx, VK_CAPITAL, VK_SHIFT,
     };
+    use windows_sys::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId;
+
     let mut state = [0u8; 256];
     let _ = GetKeyboardState(state.as_mut_ptr());
     if (GetAsyncKeyState(VK_SHIFT as i32) as u16 & 0x8000) != 0 {
@@ -258,8 +288,13 @@ unsafe fn translate_vk_to_char(vk: u32, scan: u32) -> Option<char> {
         state[VK_CAPITAL as usize] = 0x01;
     }
     let mut buf = [0u16; 4];
-    let layout = GetKeyboardLayout(0);
-    let len = ToUnicodeEx(vk, scan, state.as_ptr(), buf.as_mut_ptr(), 4, 0, layout);
+    let tid = if cur_hwnd != 0 {
+        GetWindowThreadProcessId(cur_hwnd as HWND, std::ptr::null_mut())
+    } else {
+        0
+    };
+    let layout = GetKeyboardLayout(tid);
+    let len = ToUnicodeEx(vk, scan, state.as_ptr(), buf.as_mut_ptr(), 4, 4, layout);
     if len == 1 {
         char::from_u32(buf[0] as u32)
     } else {

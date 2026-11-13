@@ -254,6 +254,7 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
             let mut s = ctx.state.lock().unwrap();
             s.settings.paused = !s.settings.paused;
             s.save_settings();
+            crate::hook::refresh_hook_snapshot(&s);
             s.settings.paused
         };
         ctx.ws_hub

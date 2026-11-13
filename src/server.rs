@@ -252,6 +252,7 @@ fn handle_request(mut req: Request, state: Arc<Mutex<AppState>>, ws_hub: WsHub) 
         };
         s.commands.push(item.clone());
         s.save_commands();
+        crate::hook::refresh_hook_snapshot(&s);
         drop(s);
 
         ws_hub.broadcast(&json!({ "type": "commands.changed" }));
@@ -324,6 +325,7 @@ fn handle_request(mut req: Request, state: Arc<Mutex<AppState>>, ws_hub: WsHub) 
             let mut s = state.lock().unwrap();
             s.commands = imported_list;
             s.save_commands();
+            crate::hook::refresh_hook_snapshot(&s);
         }
         ws_hub.broadcast(&json!({ "type": "commands.changed" }));
         let _ = send_json(req, 200, &origin, Some(json!({ "imported": count })));
@@ -413,6 +415,7 @@ fn handle_request(mut req: Request, state: Arc<Mutex<AppState>>, ws_hub: WsHub) 
                 s.commands[idx].updated_at = store::iso_now();
                 let updated = s.commands[idx].clone();
                 s.save_commands();
+                crate::hook::refresh_hook_snapshot(&s);
                 drop(s);
 
                 ws_hub.broadcast(&json!({ "type": "commands.changed" }));
@@ -427,6 +430,7 @@ fn handle_request(mut req: Request, state: Arc<Mutex<AppState>>, ws_hub: WsHub) 
                 };
                 s.commands.remove(idx);
                 s.save_commands();
+                crate::hook::refresh_hook_snapshot(&s);
                 drop(s);
 
                 ws_hub.broadcast(&json!({ "type": "commands.changed" }));
@@ -474,6 +478,7 @@ fn handle_request(mut req: Request, state: Arc<Mutex<AppState>>, ws_hub: WsHub) 
         }
 
         s.save_settings();
+        crate::hook::refresh_hook_snapshot(&s);
         let mut resp = serde_json::to_value(&s.settings).unwrap_or_else(|_| json!({}));
         if let Some(obj) = resp.as_object_mut() {
             obj.insert("restartRequired".to_string(), json!(restart_required));
@@ -493,6 +498,7 @@ fn handle_request(mut req: Request, state: Arc<Mutex<AppState>>, ws_hub: WsHub) 
             let mut s = state.lock().unwrap();
             s.settings.paused = true;
             s.save_settings();
+            crate::hook::refresh_hook_snapshot(&s);
         }
         ws_hub.broadcast(&json!({ "type": "hook.state", "paused": true }));
         let _ = send_json(req, 200, &origin, Some(json!({ "paused": true })));
@@ -504,6 +510,7 @@ fn handle_request(mut req: Request, state: Arc<Mutex<AppState>>, ws_hub: WsHub) 
             let mut s = state.lock().unwrap();
             s.settings.paused = false;
             s.save_settings();
+            crate::hook::refresh_hook_snapshot(&s);
         }
         ws_hub.broadcast(&json!({ "type": "hook.state", "paused": false }));
         let _ = send_json(req, 200, &origin, Some(json!({ "paused": false })));
