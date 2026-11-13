@@ -1,0 +1,70 @@
+{
+  "v": 2,
+  "id": "zc_mwepsols_fyuh",
+  "sid": "s_mwepsolr_hbpn",
+  "repo": "umerhammaz/mentions",
+  "ts": 1794558499899,
+  "sha": "61fcc68d27bd5066723eb2fb6466d90cbdb94b46",
+  "branch": "main",
+  "delivery": "direct",
+  "msgSubj": "feat(sync): Synchronized 4 file(s) across 1 prompt turn(s)",
+  "msgHash": "91116a15e68bcd08",
+  "files": [
+    [
+      "src/hook.rs",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "src/injector.rs",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "src/server.rs",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "src/tray.rs",
+      "m",
+      "ai",
+      1,
+      0
+    ]
+  ],
+  "sum": {
+    "files": 4,
+    "add": 0,
+    "mod": 4,
+    "del": 0,
+    "src": {
+      "ai": 4
+    }
+  },
+  "warn": {
+    "quarantine": 0,
+    "halluc": 0,
+    "secret": 0,
+    "runtime": 0,
+    "override": false
+  },
+  "safety": {
+    "canary": "8/8",
+    "vault": "persistent"
+  },
+  "base": {
+    "gen": 0,
+    "anc": "T",
+    "race": 0
+  },
+  "verify": 1,
+  "ms": 7341,
+  "hash": "879d34191c3736da"
+}
