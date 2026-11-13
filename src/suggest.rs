@@ -264,7 +264,7 @@ unsafe fn run_popup_loop() {
     use windows_sys::Win32::Graphics::Gdi::{
         BeginPaint, BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, CreateFontW,
         CreateSolidBrush, DeleteDC, DeleteObject, DrawTextW, EndPaint, FillRect, FrameRect,
-        GetMonitorInfoW, MonitorFromPoint, SelectObject, SetBkMode, SetTextColor,
+        GetMonitorInfoW, InvalidateRect, MonitorFromPoint, SelectObject, SetBkMode, SetTextColor,
         CLEARTYPE_QUALITY, CLIP_DEFAULT_PRECIS, DEFAULT_CHARSET, DEFAULT_PITCH, DT_END_ELLIPSIS,
         DT_LEFT, DT_NOPREFIX, DT_SINGLELINE, DT_VCENTER, FF_DONTCARE, FW_NORMAL, FW_SEMIBOLD,
         MONITORINFO, MONITOR_DEFAULTTONEAREST, OUT_DEFAULT_PRECIS, PAINTSTRUCT, SRCCOPY,
@@ -276,7 +276,7 @@ unsafe fn run_popup_loop() {
     use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows_sys::Win32::UI::HiDpi::GetDpiForWindow;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, InvalidateRect,
+        CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW,
         RegisterClassW, SetWindowPos, ShowWindow, TranslateMessage, HWND_TOPMOST, MA_NOACTIVATE,
         MSG, SWP_NOACTIVATE, SWP_SHOWWINDOW, SW_HIDE, WM_ERASEBKGND, WM_LBUTTONDOWN,
         WM_MOUSEACTIVATE, WM_MOUSEMOVE, WM_PAINT, WNDCLASSW, WS_EX_NOACTIVATE,
@@ -707,8 +707,9 @@ unsafe fn locate_caret_anchor(
     last_click: Option<(isize, i32, i32)>,
 ) -> Option<(i32, i32, i32)> {
     use windows_sys::Win32::Foundation::{HWND, POINT, RECT};
+    use windows_sys::Win32::Graphics::Gdi::ClientToScreen;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        ClientToScreen, GetGUIThreadInfo, GetWindowRect, GetWindowThreadProcessId, GUITHREADINFO,
+        GetGUIThreadInfo, GetWindowRect, GetWindowThreadProcessId, GUITHREADINFO,
     };
 
     if target_hwnd == 0 {
