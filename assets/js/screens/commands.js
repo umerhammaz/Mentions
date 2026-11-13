@@ -615,7 +615,7 @@ const routeScreen = {
           }, "Copy"),
           h("button", { class: "btn btn--sm", type: "button", onClick: () => duplicateCommand(c) }, "Duplicate"),
           h("button", {
-            class: "btn btn--sm btn--danger-outline",
+            class: "btn btn--sm btn--danger",
             type: "button",
             style: { marginLeft: "auto" },
             onClick: () => confirmDelete(c),

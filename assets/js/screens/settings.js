@@ -235,6 +235,16 @@ const screen = {
       ),
       h("div", { class: "settings__row" },
         h("div", { class: "settings__row-text" },
+          h("span", { class: "t-body" }, "Auto-update Windows app"),
+          h("span", { class: "t-caption" }, "Downloads and installs verified updates automatically.")
+        ),
+        toggleSwitch(settings.autoUpdate !== false, (checked) => {
+          settings.autoUpdate = checked;
+          save({ autoUpdate: checked }, "startup", status);
+        })
+      ),
+      h("div", { class: "settings__row" },
+        h("div", { class: "settings__row-text" },
           h("span", { class: "t-body" }, "Local command storage"),
           h("span", { class: "t-caption" }, "Saved only on this PC. Nothing is ever uploaded.")
         ),
@@ -276,7 +286,7 @@ const screen = {
           h("span", { class: "t-body" }, "This browser is paired"),
           h("span", { class: "t-caption" }, "Revoking locks all connected tabs until paired again from the tray.")
         ),
-        h("button", { class: "btn btn--sm btn--danger-outline", type: "button", onClick: revokeAll }, "Revoke all browsers")
+        h("button", { class: "btn btn--sm btn--danger", type: "button", onClick: revokeAll }, "Revoke all browsers")
       )
     ]);
 
@@ -329,6 +339,7 @@ const screen = {
     async function checkUpdateStatus() {
       versionStatusSlot.textContent = "Checking GitHub...";
       try {
+        await request("/api/update/check", { method: "POST" });
         const res = await fetch("https://api.github.com/repos/umerhammaz/Mentions/releases/latest", {
           headers: { Accept: "application/vnd.github.v3+json" },
         });
@@ -339,13 +350,28 @@ const screen = {
         if (latestTag && current && latestTag !== current) {
           versionStatusSlot.replaceChildren(
             h("span", { style: { color: "var(--warning)", fontWeight: "600" } }, `v${latestTag} available (current: v${current})`),
+            h("button", {
+              type: "button",
+              class: "btn btn--sm btn--primary",
+              style: { marginLeft: "var(--space-2)" },
+              onClick: async (e) => {
+                e.currentTarget.disabled = true;
+                e.currentTarget.textContent = "Updating...";
+                try {
+                  await request("/api/update/install", { method: "POST" });
+                  toast({ message: `Updating to v${latestTag}...` });
+                } catch {
+                  toast({ message: "Couldn't start update." });
+                }
+              },
+            }, `Install v${latestTag}`),
             h("a", {
               href: DOWNLOAD_URL,
               target: "_blank",
               rel: "noopener",
               class: "btn btn--sm",
               style: { marginLeft: "var(--space-2)" },
-            }, `Download v${latestTag}`)
+            }, "Download .exe")
           );
         } else {
           versionStatusSlot.replaceChildren(

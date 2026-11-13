@@ -297,7 +297,7 @@ export async function renderEditor({ root, params }, { mode }) {
     ),
     h("div", { class: "editor__actions" },
       !isNew ? h("button", {
-        class: "btn btn--danger-outline",
+        class: "btn btn--danger",
         type: "button",
         style: { marginInlineEnd: "auto" },
         onClick: onDelete,

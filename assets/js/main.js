@@ -8,7 +8,7 @@ import { startRouter, navigate } from "./router.js";
 import { healthLoop, request } from "./api.js";
 import { state, set, on } from "./store.js";
 import { connectWS, disconnectWS } from "./ws.js";
-import { renderChip, renderBanner, clearBanners } from "./ui.js";
+import { renderChip, renderBanner, clearBanners, toast } from "./ui.js";
 import { h } from "./dom.js";
 import gateScreen from "./screens/pair.js";
 
@@ -33,7 +33,7 @@ if (location.pathname !== "/pair") {
 
 function isUnlocked(hh = state.health) {
   const s = hh?.state;
-  return s === "online" || s === "paused";
+  return s === "online" || s === "paused" || s === "updating";
 }
 
 hookToggle.addEventListener("click", async () => {
@@ -57,11 +57,12 @@ const renderRoute = startRouter({
 
 let lastUnlocked = false;
 let lastUiSig = "";
+let lastShownUpdateVer = "";
 
 on("state:health", async ({ detail }) => {
   const hh = detail.value;
   const unlocked = isUnlocked(hh);
-  const sig = `${hh?.state || ""}:${Boolean(hh?.paused)}:${hh?.daemonVersion || ""}`;
+  const sig = `${hh?.state || ""}:${Boolean(hh?.paused)}:${hh?.daemonVersion || ""}:${hh?.update?.availableVersion || ""}`;
 
   document.body.classList.toggle("is-locked", !unlocked);
 
@@ -82,10 +83,15 @@ on("state:health", async ({ detail }) => {
     if (railVersion) {
       railVersion.textContent = unlocked && hh?.daemonVersion ? `Daemon v${hh.daemonVersion}` : "";
     }
-    if (unlocked) {
+    if (hh?.state === "online" || hh?.state === "paused") {
       connectWS();
-    } else if (hh?.state !== "connecting") {
+    } else if (hh?.state !== "connecting" && hh?.state !== "updating") {
       disconnectWS();
+    }
+    const updFrom = hh?.update?.justUpdatedFrom;
+    if ((hh?.state === "online" || hh?.state === "paused") && updFrom && hh?.daemonVersion && lastShownUpdateVer !== hh.daemonVersion) {
+      lastShownUpdateVer = hh.daemonVersion;
+      toast({ message: `Updated Mentions to v${hh.daemonVersion}.` });
     }
   }
 
@@ -113,7 +119,13 @@ on("state:health", async ({ detail }) => {
 function refreshBanner(hh) {
   clearBanners();
   if (!hh) return;
-  if (hh.state === "paused") {
+  if (hh.state === "updating") {
+    renderBanner({
+      tone: "info",
+      title: hh.updatingTo ? `Updating Mentions to v${hh.updatingTo}...` : "Updating Mentions...",
+      body: "Reconnecting automatically in a moment.",
+    });
+  } else if (hh.state === "paused") {
     renderBanner({
       tone: "warning",
       title: "Expansion is paused",

@@ -1,7 +1,9 @@
+
+```rust
 use crate::store::{self, AppState, ArcCommandSlice, CommandItem, CommandSummary};
 use serde_json::{json, Value};
 use std::io::Read;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
 use tungstenite::protocol::{Message, Role};
@@ -35,13 +37,30 @@ impl WsHub {
     }
 }
 
+static HTTP_SERVER: OnceLock<Arc<Server>> = OnceLock::new();
+
+pub fn stop_http_server() {
+    if let Some(srv) = HTTP_SERVER.get() {
+        srv.unblock();
+    }
+}
+
 pub fn start_http_server(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
     let port = { state.lock().unwrap().settings.port };
     thread::spawn(move || {
         let bind_addr = format!("127.0.0.1:{}", port);
-        let Ok(server) = Server::http(&bind_addr) else {
+        let mut bound = None;
+        for _ in 0..30 {
+            if let Ok(srv) = Server::http(&bind_addr) {
+                bound = Some(Arc::new(srv));
+                break;
+            }
+            thread::sleep(std::time::Duration::from_millis(100));
+        }
+        let Some(server) = bound else {
             return;
         };
+        let _ = HTTP_SERVER.set(Arc::clone(&server));
 
         for request in server.incoming_requests() {
             let st = Arc::clone(&state);
@@ -58,6 +77,8 @@ fn handle_request(mut req: Request, state: Arc<Mutex<AppState>>, ws_hub: WsHub) 
         if header_value(&req, "origin").is_none() {
             ws_hub.broadcast(&json!({ "type": "daemon.stopping" }));
             store::flush_pending_saves();
+            stop_http_server();
+            crate::release_instance_guard();
             let _ = req.respond(Response::empty(StatusCode(200)));
             std::process::exit(0);
         }
@@ -99,6 +120,7 @@ fn handle_request(mut req: Request, state: Arc<Mutex<AppState>>, ws_hub: WsHub) 
         let auth_header = header_value(&req, "authorization");
         let s = state.lock().unwrap();
         let is_authed = s.is_valid_token(auth_header.as_deref());
+        let upd = crate::updater::status_json();
         let _ = send_json(
             req,
             200,
@@ -110,7 +132,8 @@ fn handle_request(mut req: Request, state: Arc<Mutex<AppState>>, ws_hub: WsHub) 
                 "paused": s.settings.paused,
                 "requiresPairing": s.tokens.is_empty() || !is_authed,
                 "versionMismatch": false,
-                "elevatedHint": false
+                "elevatedHint": false,
+                "update": upd
             })),
         );
         return;
@@ -537,6 +560,17 @@ fn handle_request(mut req: Request, state: Arc<Mutex<AppState>>, ws_hub: WsHub) 
         if let Some(st) = body.get("statsEnabled").and_then(|v| v.as_bool()) {
             s.settings.stats_enabled = st;
         }
+        if let Some(sp) = body.get("suggestPopup").and_then(|v| v.as_bool()) {
+            s.settings.suggest_popup = sp;
+        }
+        if let Some(ak) = body.get("suggestAcceptKey").and_then(|v| v.as_str()) {
+            if matches!(ak, "tab" | "enter" | "both") {
+                s.settings.suggest_accept_key = ak.to_string();
+            }
+        }
+        if let Some(au) = body.get("autoUpdate").and_then(|v| v.as_bool()) {
+            s.settings.auto_update = au;
+        }
 
         s.save_settings();
         crate::hook::refresh_hook_snapshot(&s);
@@ -583,6 +617,19 @@ fn handle_request(mut req: Request, state: Arc<Mutex<AppState>>, ws_hub: WsHub) 
         s.tokens.clear();
         s.save_tokens();
         let _ = send_json(req, 204, &origin, None);
+        return;
+    }
+
+    if path == "/api/update/check" && *req.method() == Method::Post {
+        let auto = state.lock().unwrap().settings.auto_update;
+        crate::updater::trigger_check(auto);
+        let _ = send_json(req, 200, &origin, Some(crate::updater::status_json()));
+        return;
+    }
+
+    if path == "/api/update/install" && *req.method() == Method::Post {
+        crate::updater::trigger_install();
+        let _ = send_json(req, 200, &origin, Some(crate::updater::status_json()));
         return;
     }
 

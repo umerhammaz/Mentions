@@ -20,6 +20,7 @@
   table { border-collapse: collapse; width: 100%; }
   dialog { border: 0; padding: 0; background: transparent; }
   :focus { outline: none; }
+  [tabindex="-1"]:focus, [tabindex="-1"]:focus-visible { outline: none; }
   :focus-visible {
     outline: var(--focus-ring);
     outline-offset: var(--focus-offset);

@@ -117,6 +117,8 @@ pub struct Settings {
     pub suggest_popup: bool,
     #[serde(rename = "suggestAcceptKey", default = "default_suggest_accept_key")]
     pub suggest_accept_key: String,
+    #[serde(rename = "autoUpdate", default = "default_auto_update")]
+    pub auto_update: bool,
 }
 
 fn default_suggest_popup() -> bool {
@@ -125,6 +127,10 @@ fn default_suggest_popup() -> bool {
 
 fn default_suggest_accept_key() -> String {
     "both".to_string()
+}
+
+fn default_auto_update() -> bool {
+    true
 }
 
 impl Default for Settings {
@@ -139,6 +145,7 @@ impl Default for Settings {
             paused: false,
             suggest_popup: true,
             suggest_accept_key: "both".to_string(),
+            auto_update: true,
         }
     }
 }
@@ -316,6 +323,7 @@ impl AppState {
         self.id_index.get(id).and_then(|&i| self.commands.get(i))
     }
 
+    #[allow(dead_code)]
     pub fn get_enabled_text_by_id(&self, id: &str) -> Option<String> {
         self.get_command_by_id(id)
             .filter(|c| c.enabled)

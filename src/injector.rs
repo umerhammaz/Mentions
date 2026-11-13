@@ -1,27 +1,37 @@
 use crate::store::AppState;
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
 pub const SELF_STAMP: usize = 0x4D45_4E54;
 
+enum ExpandPayload {
+    Text(String),
+    CommandId(String),
+}
+
 struct ExpandJob {
     id: u64,
     erase_count: usize,
-    command_id: String,
+    payload: ExpandPayload,
     restore_clipboard: bool,
     fallback: String,
     target_hwnd: isize,
 }
 
 static JOB_SEQ: AtomicU64 = AtomicU64::new(0);
+static INJECTOR_BUSY: AtomicBool = AtomicBool::new(false);
 static APP_STATE: OnceLock<Arc<Mutex<AppState>>> = OnceLock::new();
 static WORKER: OnceLock<Arc<(Mutex<VecDeque<ExpandJob>>, Condvar)>> = OnceLock::new();
 
 pub fn init_injector_state(state: Arc<Mutex<AppState>>) {
     let _ = APP_STATE.set(state);
+}
+
+pub fn is_busy() -> bool {
+    INJECTOR_BUSY.load(Ordering::Acquire)
 }
 
 #[cfg(windows)]
@@ -32,9 +42,9 @@ fn lookup_enabled_text(command_id: &str) -> Option<String> {
 }
 
 #[cfg(windows)]
-pub fn expand_command_by_id(
+fn enqueue_job(
     erase_count: usize,
-    command_id: &str,
+    payload: ExpandPayload,
     restore_clipboard: bool,
     fallback: &str,
     target_hwnd: isize,
@@ -46,7 +56,7 @@ pub fn expand_command_by_id(
         q.push_back(ExpandJob {
             id,
             erase_count,
-            command_id: command_id.to_string(),
+            payload,
             restore_clipboard,
             fallback: fallback.to_string(),
             target_hwnd,
@@ -55,6 +65,54 @@ pub fn expand_command_by_id(
     }
 }
 
+#[allow(dead_code)]
+#[cfg(windows)]
+pub fn expand_text(
+    erase_count: usize,
+    text: &str,
+    restore_clipboard: bool,
+    fallback: &str,
+    target_hwnd: isize,
+) {
+    enqueue_job(
+        erase_count,
+        ExpandPayload::Text(text.to_string()),
+        restore_clipboard,
+        fallback,
+        target_hwnd,
+    );
+}
+
+#[allow(dead_code)]
+#[cfg(not(windows))]
+pub fn expand_text(
+    _erase_count: usize,
+    _text: &str,
+    _restore_clipboard: bool,
+    _fallback: &str,
+    _target_hwnd: isize,
+) {
+}
+
+#[allow(dead_code)]
+#[cfg(windows)]
+pub fn expand_command_by_id(
+    erase_count: usize,
+    command_id: &str,
+    restore_clipboard: bool,
+    fallback: &str,
+    target_hwnd: isize,
+) {
+    enqueue_job(
+        erase_count,
+        ExpandPayload::CommandId(command_id.to_string()),
+        restore_clipboard,
+        fallback,
+        target_hwnd,
+    );
+}
+
+#[allow(dead_code)]
 #[cfg(not(windows))]
 pub fn expand_command_by_id(
     _erase_count: usize,
@@ -103,6 +161,16 @@ const OPEN_CLIPBOARD_MAX_POLLS: usize = 32;
 const UNICODE_CHUNK_CHARS: usize = 32;
 
 #[cfg(windows)]
+struct BusyGuard;
+
+#[cfg(windows)]
+impl Drop for BusyGuard {
+    fn drop(&mut self) {
+        INJECTOR_BUSY.store(false, Ordering::Release);
+    }
+}
+
+#[cfg(windows)]
 unsafe fn run_worker(queue: Arc<(Mutex<VecDeque<ExpandJob>>, Condvar)>) {
     use windows_sys::Win32::System::DataExchange::{
         GetClipboardSequenceNumber, GetOpenClipboardWindow,
@@ -112,10 +180,16 @@ unsafe fn run_worker(queue: Arc<(Mutex<VecDeque<ExpandJob>>, Condvar)>) {
 
     loop {
         let job = pop_next_job(&queue);
+        INJECTOR_BUSY.store(true, Ordering::Release);
+        let _busy_guard = BusyGuard;
         pump_owner_messages(owner_hwnd);
 
-        let Some(text) = lookup_enabled_text(&job.command_id) else {
-            continue;
+        let text = match job.payload {
+            ExpandPayload::Text(t) => t,
+            ExpandPayload::CommandId(ref cmd_id) => match lookup_enabled_text(cmd_id) {
+                Some(t) => t,
+                None => continue,
+            },
         };
 
         if !is_same_target_window(job.target_hwnd) {

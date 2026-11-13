@@ -160,7 +160,7 @@
     padding: var(--space-6) var(--space-8) var(--space-10);
     min-width: 0;
   }
-  main:focus {
+  main:focus, main:focus-visible {
     outline: none;
   }
 

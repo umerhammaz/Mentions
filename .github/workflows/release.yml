@@ -24,11 +24,17 @@ jobs:
         env:
           RUSTFLAGS: "-C target-feature=+crt-static"
 
+      - name: Generate SHA-256 checksum
+        shell: bash
+        run: sha256sum target/release/mentions-daemon.exe | awk '{print $1}' > target/release/mentions-daemon.exe.sha256
+
       - name: Upload daemon executable artifact
         uses: actions/upload-artifact@v4
         with:
           name: mentions-daemon-windows-x64
-          path: target/release/mentions-daemon.exe
+          path: |
+            target/release/mentions-daemon.exe
+            target/release/mentions-daemon.exe.sha256
 
       - name: Extract Cargo version
         id: get_version
@@ -43,4 +49,6 @@ jobs:
           tag_name: ${{ steps.get_version.outputs.VERSION }}
           name: Mentions Windows Daemon (${{ steps.get_version.outputs.VERSION }})
           prerelease: false
-          files: target/release/mentions-daemon.exe
+          files: |
+            target/release/mentions-daemon.exe
+            target/release/mentions-daemon.exe.sha256

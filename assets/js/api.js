@@ -100,6 +100,9 @@ export async function probeHealth() {
     set("health", result);
     return result;
   } catch (err) {
+    if (state.health?.state === "updating" && Date.now() < (state.health.updatingUntil || 0)) {
+      return state.health;
+    }
     const result = { state: "offline", code: err.code, lastCheckedAt: Date.now() };
     set("health", result);
     return result;
@@ -121,8 +124,12 @@ export function healthLoop({ intervalMs = 5000, fastIntervalMs = 2000, onResult 
       if (derived !== "online" && derived !== "paused") nextDelay = fastIntervalMs;
       onResult({ ...data, state: derived });
     } catch (err) {
-      nextDelay = fastIntervalMs;
-      onResult({ state: "offline", code: err.code, lastCheckedAt: Date.now() });
+      if (state.health?.state === "updating" && Date.now() < (state.health.updatingUntil || 0)) {
+        nextDelay = 400;
+      } else {
+        nextDelay = fastIntervalMs;
+        onResult({ state: "offline", code: err.code, lastCheckedAt: Date.now() });
+      }
     } finally {
       if (!stopped && !document.hidden) timer = setTimeout(tick, nextDelay);
     }

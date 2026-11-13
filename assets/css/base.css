@@ -36,34 +36,26 @@
   .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
     height: 36px; padding-inline: var(--space-3);
-    border-radius: var(--radius-control);
-    font-size: var(--fs-label); line-height: var(--lh-label); font-weight: 500;
-    border: var(--border-structure);
+    border-radius: 4px;
+    font-size: var(--fs-label); line-height: var(--lh-label); font-weight: 600;
+    border: 0;
     background: var(--surface-container-high);
     color: var(--on-surface);
     text-decoration: none;
-    transition: background var(--dur-1) var(--ease-standard), border-color var(--dur-1) var(--ease-standard);
+    transition: background var(--dur-1) var(--ease-standard);
     cursor: pointer;
     white-space: nowrap;
   }
-  .btn:hover { background: color-mix(in oklab, var(--on-surface) 10%, var(--surface-container-high)); border-color: var(--outline); }
-  .btn:active { background: color-mix(in oklab, var(--on-surface) 14%, var(--surface-container-high)); }
+  .btn:hover { background: color-mix(in oklab, var(--on-surface) 12%, var(--surface-container-high)); }
+  .btn:active { background: color-mix(in oklab, var(--on-surface) 18%, var(--surface-container-high)); }
   .btn:disabled, .btn[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
-  .btn--sm { height: 30px; padding-inline: var(--space-2); font-size: var(--fs-caption); }
-  .btn--primary { background: var(--primary); color: var(--on-primary); border-color: transparent; font-weight: 600; }
-  .btn--primary:hover { background: color-mix(in oklab, var(--on-primary) 8%, var(--primary)); border-color: transparent; }
-  .btn--quiet { background: transparent; border-color: transparent; }
-  .btn--quiet:hover { background: color-mix(in oklab, var(--on-surface) 8%, transparent); border-color: transparent; }
-  .btn--danger { color: var(--on-danger); background: var(--danger); border-color: transparent; }
-  .btn--danger-outline {
-    background: color-mix(in oklab, var(--danger) 10%, transparent);
-    border-color: color-mix(in oklab, var(--danger) 38%, transparent);
-    color: var(--danger);
-  }
-  .btn--danger-outline:hover {
-    background: color-mix(in oklab, var(--danger) 18%, transparent);
-    border-color: var(--danger);
-  }
+  .btn--sm { height: 30px; padding-inline: var(--space-3); font-size: var(--fs-caption); }
+  .btn--primary { background: var(--primary); color: var(--on-primary); }
+  .btn--primary:hover { background: color-mix(in oklab, var(--on-primary) 10%, var(--primary)); }
+  .btn--quiet { background: transparent; font-weight: 500; color: var(--on-surface-variant); }
+  .btn--quiet:hover { background: var(--surface-container-high); color: var(--on-surface); }
+  .btn--danger { background: oklch(56% 0.21 25); color: oklch(98% 0.005 80); }
+  .btn--danger:hover { background: oklch(62% 0.22 25); }
 
   .icon-btn {
     display: inline-flex; align-items: center; justify-content: center;
@@ -74,11 +66,12 @@
 
   .code-token {
     font-family: var(--font-mono); font-size: var(--fs-mono); line-height: var(--lh-mono);
-    padding: 2px var(--space-2);
-    background: var(--surface-container-high);
-    border: var(--border-structure);
-    border-radius: 4px;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
     color: var(--on-surface);
+    font-weight: 600;
     white-space: nowrap;
   }
 }

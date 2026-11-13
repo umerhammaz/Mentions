@@ -1,6 +1,9 @@
+
+```rust
 use crate::server::WsHub;
 use crate::store::AppState;
 use serde_json::json;
+use std::sync::atomic::{AtomicIsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 struct TrayContext {
@@ -9,17 +12,49 @@ struct TrayContext {
 }
 
 static TRAY_CTX: OnceLock<TrayContext> = OnceLock::new();
+static TRAY_HWND: AtomicIsize = AtomicIsize::new(0);
+#[cfg(windows)]
+static PENDING_BALLOON: OnceLock<Mutex<(String, String)>> = OnceLock::new();
 
 #[cfg(windows)]
 const WM_TRAYICON: u32 = windows_sys::Win32::UI::WindowsAndMessaging::WM_APP + 1;
+#[cfg(windows)]
+const WM_APP_BALLOON: u32 = windows_sys::Win32::UI::WindowsAndMessaging::WM_APP + 2;
 const ID_VERSION: usize = 1000;
 const ID_OPEN: usize = 1001;
 const ID_OPEN_LOCAL: usize = 1005;
 const ID_PAIR: usize = 1002;
 const ID_COPY_PAIR: usize = 1007;
 const ID_TOGGLE_PAUSE: usize = 1003;
+const ID_CHECK_UPDATE: usize = 1008;
+const ID_INSTALL_UPDATE: usize = 1009;
 const ID_RESTART: usize = 1006;
 const ID_QUIT: usize = 1004;
+
+pub fn show_balloon(title: &str, body: &str) {
+    #[cfg(windows)]
+    {
+        let cell = PENDING_BALLOON.get_or_init(|| Mutex::new((String::new(), String::new())));
+        if let Ok(mut guard) = cell.lock() {
+            *guard = (title.to_string(), body.to_string());
+        }
+        let hwnd = TRAY_HWND.load(Ordering::Acquire);
+        if hwnd != 0 {
+            unsafe {
+                windows_sys::Win32::UI::WindowsAndMessaging::PostMessageW(
+                    hwnd as windows_sys::Win32::Foundation::HWND,
+                    WM_APP_BALLOON,
+                    0,
+                    0,
+                );
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (title, body);
+    }
+}
 
 pub fn open_browser(url: &str) {
     #[cfg(windows)]
@@ -43,18 +78,19 @@ pub fn open_browser(url: &str) {
 }
 
 #[cfg(windows)]
-pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
+pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub, updated_from: Option<String>) {
     use windows_sys::Win32::Foundation::HWND;
     use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows_sys::Win32::UI::Shell::{
-        Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NOTIFYICONDATAW,
+        Shell_NotifyIconW, NIF_ICON, NIF_INFO, NIF_MESSAGE, NIF_TIP, NIIF_INFO, NIM_ADD,
+        NIM_DELETE, NIM_MODIFY, NOTIFYICONDATAW,
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu,
         DispatchMessageW, GetCursorPos, GetMessageW, PostQuitMessage, RegisterClassW,
-        SetForegroundWindow, TrackPopupMenu, TranslateMessage, CW_USEDEFAULT,
-        MF_DISABLED, MF_GRAYED, MF_SEPARATOR, MF_STRING, MSG, TPM_BOTTOMALIGN, TPM_LEFTALIGN,
-        WM_COMMAND, WM_DESTROY, WM_LBUTTONDBLCLK, WM_RBUTTONUP, WNDCLASSW,
+        SetForegroundWindow, TrackPopupMenu, TranslateMessage, CW_USEDEFAULT, MF_DISABLED,
+        MF_GRAYED, MF_SEPARATOR, MF_STRING, MSG, TPM_BOTTOMALIGN, TPM_LEFTALIGN, WM_COMMAND,
+        WM_DESTROY, WM_LBUTTONDBLCLK, WM_RBUTTONUP, WNDCLASSW,
     };
 
     let _ = TRAY_CTX.set(TrayContext { state, ws_hub });
@@ -75,6 +111,28 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
                 }
                 0
             }
+            WM_APP_BALLOON => {
+                if let Some(cell) = PENDING_BALLOON.get() {
+                    if let Ok((title, body)) = cell.lock().map(|g| g.clone()) {
+                        let mut nid: NOTIFYICONDATAW = std::mem::zeroed();
+                        nid.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
+                        nid.hWnd = hwnd;
+                        nid.uID = 1;
+                        nid.uFlags = NIF_INFO;
+                        nid.dwInfoFlags = NIIF_INFO;
+                        let title_w: Vec<u16> = format!("{}\0", title).encode_utf16().collect();
+                        for (i, &ch) in title_w.iter().take(nid.szInfoTitle.len() - 1).enumerate() {
+                            nid.szInfoTitle[i] = ch;
+                        }
+                        let body_w: Vec<u16> = format!("{}\0", body).encode_utf16().collect();
+                        for (i, &ch) in body_w.iter().take(nid.szInfo.len() - 1).enumerate() {
+                            nid.szInfo[i] = ch;
+                        }
+                        Shell_NotifyIconW(NIM_MODIFY, &nid);
+                    }
+                }
+                0
+            }
             WM_COMMAND => {
                 let cmd = wparam & 0xFFFF;
                 match cmd {
@@ -83,6 +141,8 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
                     ID_PAIR => launch_pairing(),
                     ID_COPY_PAIR => copy_pair_code_to_clipboard(),
                     ID_TOGGLE_PAUSE => toggle_pause(),
+                    ID_CHECK_UPDATE => crate::updater::trigger_check(false),
+                    ID_INSTALL_UPDATE => crate::updater::trigger_install(),
                     ID_RESTART => crate::restart_daemon(),
                     ID_QUIT => {
                         if let Some(ctx) = TRAY_CTX.get() {
@@ -133,10 +193,20 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
         } else {
             "Pause Expansion\0".encode_utf16().collect()
         };
+        let update_st = crate::updater::get_status();
+        let check_lbl: Vec<u16> = "Check for Updates\0".encode_utf16().collect();
         let restart_lbl: Vec<u16> = "Restart Mentions\0".encode_utf16().collect();
         let quit_lbl: Vec<u16> = "Quit Mentions\0".encode_utf16().collect();
 
         AppendMenuW(menu, MF_STRING | MF_DISABLED | MF_GRAYED, ID_VERSION, ver_lbl.as_ptr());
+        if let Some(avail) = update_st.available_version {
+            let install_lbl: Vec<u16> = format!("Install Update (v{})\0", avail)
+                .encode_utf16()
+                .collect();
+            AppendMenuW(menu, MF_STRING, ID_INSTALL_UPDATE, install_lbl.as_ptr());
+        } else {
+            AppendMenuW(menu, MF_STRING, ID_CHECK_UPDATE, check_lbl.as_ptr());
+        }
         AppendMenuW(menu, MF_SEPARATOR, 0, std::ptr::null());
         AppendMenuW(menu, MF_STRING, ID_OPEN, open_lbl.as_ptr());
         AppendMenuW(menu, MF_STRING, ID_OPEN_LOCAL, local_lbl.as_ptr());
@@ -311,7 +381,15 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
             nid.szTip[i] = ch;
         }
 
+        TRAY_HWND.store(hwnd as isize, Ordering::Release);
         Shell_NotifyIconW(NIM_ADD, &nid);
+
+        if updated_from.is_some() {
+            show_balloon(
+                "Mentions updated",
+                &format!("Now running Mentions v{}.", env!("CARGO_PKG_VERSION")),
+            );
+        }
 
         let mut msg: MSG = std::mem::zeroed();
         while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
@@ -319,6 +397,7 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
             DispatchMessageW(&msg);
         }
 
+        TRAY_HWND.store(0, Ordering::Release);
         Shell_NotifyIconW(NIM_DELETE, &nid);
     }
 }
@@ -394,7 +473,11 @@ fn create_windows_shortcut(target_exe: &std::path::Path, link_path: &std::path::
 }
 
 #[cfg(not(windows))]
-pub fn run_tray_loop(_state: Arc<Mutex<AppState>>, _ws_hub: WsHub) {
+pub fn run_tray_loop(
+    _state: Arc<Mutex<AppState>>,
+    _ws_hub: WsHub,
+    _updated_from: Option<String>,
+) {
     loop {
         std::thread::sleep(std::time::Duration::from_secs(3600));
     }
