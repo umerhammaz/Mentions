@@ -13,18 +13,22 @@ export function route(pattern, screen) {
   routes.push({ re: new RegExp("^" + withParams + "$"), keys, screen });
 }
 
-export function startRouter({ root, defaultTitle = "Mentions" }) {
+export function startRouter({ root, defaultTitle = "Mentions", guard = null }) {
   let current = null;
 
   async function render() {
     const path = location.pathname.replace(/\/+$/, "") || "/";
-    let match = null, params = {};
-    for (const r of routes) {
-      const m = path.match(r.re);
-      if (m) {
-        match = r;
-        r.keys.forEach((k, i) => { params[k] = decodeURIComponent(m[i + 1]); });
-        break;
+    const blockedScreen = guard ? guard(path) : null;
+    let match = blockedScreen ? { screen: blockedScreen } : null;
+    const params = {};
+    if (!match) {
+      for (const r of routes) {
+        const m = path.match(r.re);
+        if (m) {
+          match = r;
+          r.keys.forEach((k, i) => { params[k] = decodeURIComponent(m[i + 1]); });
+          break;
+        }
       }
     }
     if (!match) { location.href = "/404.html"; return; }
@@ -44,8 +48,11 @@ export function startRouter({ root, defaultTitle = "Mentions" }) {
 
     for (const link of document.querySelectorAll(".rail__link")) {
       const href = link.getAttribute("href");
-      if (href === path || (href !== "/" && path.startsWith(href))) link.setAttribute("aria-current", "page");
-      else link.removeAttribute("aria-current");
+      if (!blockedScreen && (href === path || (href !== "/" && path.startsWith(href)))) {
+        link.setAttribute("aria-current", "page");
+      } else {
+        link.removeAttribute("aria-current");
+      }
     }
 
     const main = document.getElementById("main");

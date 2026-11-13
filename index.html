@@ -14,7 +14,7 @@
 <link rel="stylesheet" href="/assets/css/components.css">
 <link rel="stylesheet" href="/assets/css/screens.css">
 </head>
-<body>
+<body class="is-locked">
 <a class="skip" href="#main">Skip to content</a>
 
 <nav class="rail" aria-label="Primary">
@@ -38,9 +38,9 @@
   <div class="rail__footer">
     <div class="rail__status-row">
       <div id="status" class="appbar__status" aria-live="polite"></div>
-      <button id="hook-toggle" class="btn btn--quiet rail__pause-btn" hidden aria-pressed="false">Pause</button>
+      <button id="hook-toggle" class="btn btn--sm rail__pause-btn" hidden aria-pressed="false">Pause</button>
     </div>
-    <a id="download-app" class="btn rail__download-btn" href="https://github.com/umerhammaz/Mentions/releases/latest/download/mentions-daemon.exe" target="_blank" rel="noopener">Download app</a>
+    <div id="rail-version" class="rail__version t-caption"></div>
   </div>
 </nav>
 

@@ -47,6 +47,7 @@ export function connectWS() {
       });
     } else if (msg.type === "daemon.stopping") {
       emit("daemon:stopping");
+      set("health", { state: "offline", lastCheckedAt: Date.now() });
     }
   });
   ws.addEventListener("close", () => {

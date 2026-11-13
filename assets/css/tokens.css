@@ -25,16 +25,16 @@
   --focus-ring: 2px solid var(--accent);
   --focus-offset: 2px;
   --appbar-h: 56px;
-  --rail-w: 220px;
+  --rail-w: 236px;
   --rail-compact: 72px;
 
-  --surface: oklch(18% 0.01 60);
-  --surface-container: oklch(22% 0.012 60);
-  --surface-container-high: oklch(26% 0.014 60);
-  --on-surface: oklch(94% 0.008 80);
+  --surface: oklch(14.5% 0.008 55);
+  --surface-container: oklch(18.5% 0.01 55);
+  --surface-container-high: oklch(23% 0.012 55);
+  --on-surface: oklch(95% 0.008 80);
   --on-surface-variant: oklch(72% 0.015 80);
-  --outline: oklch(50% 0.015 60);
-  --outline-variant: oklch(32% 0.012 60);
+  --outline: oklch(48% 0.015 60);
+  --outline-variant: oklch(28% 0.012 55);
   --primary: oklch(94% 0.008 80);
   --on-primary: oklch(18% 0.01 60);
   --accent: oklch(70% 0.15 45);

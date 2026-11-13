@@ -1,47 +1,64 @@
 import { h } from "../dom.js";
 import { state, set, tokenClear } from "../store.js";
-import { request, ApiError, isDemoMode } from "../api.js";
-import { route, navigate } from "../router.js";
+import { request, ApiError, getPort, setPort, probeHealth } from "../api.js";
+import { route } from "../router.js";
 import { toast, confirmDialog } from "../ui.js";
 import { announce, formatDate } from "../a11y.js";
+
+const DOWNLOAD_URL = "https://github.com/umerhammaz/Mentions/releases/latest/download/mentions-daemon.exe";
 
 const screen = {
   title: "Settings",
   async mount({ root }) {
-    const container = h("section", { "aria-labelledby": "settings-h" });
+    const container = h("section", { class: "settings", "aria-labelledby": "settings-h" });
     root.replaceChildren(container);
 
     let settings = null;
     let loadErr = null;
     try {
       settings = await request("/api/settings");
+      if (settings) set("settings", settings);
     } catch (err) {
       loadErr = err;
-      settings = { port: 31415, terminator: "space", restoreClipboard: true, injectionFallback: "clipboard", autostart: false, statsEnabled: false };
+      settings = state.settings || {
+        port: getPort(),
+        terminator: "space",
+        restoreClipboard: true,
+        injectionFallback: "clipboard",
+        autostart: false,
+        statsEnabled: false,
+      };
     }
 
-    const sections = [];
-    let savedAt = {};
+    const cards = [];
+    const savedAt = {};
 
-    function section(id, title, bodyFn) {
+    function card(id, title, bodyFn) {
       const status = h("span", { class: "settings__status", role: "status" }, savedAt[id] ? `Saved ${formatDate(savedAt[id])}` : "");
       const body = bodyFn(status);
-      sections.push(h("div", { class: "settings__section", id },
-        h("header", { class: "settings__section-head" }, h("h2", { class: "t-headline" }, title), status),
-        ...body
-      ));
+      cards.push(
+        h("div", { class: "settings__card", id },
+          h("header", { class: "settings__section-head" },
+            h("h2", { class: "t-title" }, title),
+            status
+          ),
+          ...body
+        )
+      );
     }
 
     async function save(patch, sectionId, statusEl) {
       try {
         const result = await request("/api/settings", { method: "PATCH", body: patch });
+        if (result) set("settings", result);
         savedAt[sectionId] = new Date().toISOString();
-        if (statusEl) statusEl.textContent = `Saved ${formatDate(savedAt[sectionId])}`;
+        if (statusEl) statusEl.textContent = "✓ Saved";
         announce("Settings saved.");
-        if (result?.restartRequired) toast({ message: "Restart the daemon for the port change to take effect." });
+        return result;
       } catch (err) {
         const msg = err instanceof ApiError && err.message ? err.message : "Couldn't save settings.";
         toast({ message: msg });
+        return null;
       }
     }
 
@@ -50,7 +67,7 @@ const screen = {
       return h("label", { class: "switch" },
         h("input", {
           type: "checkbox",
-          checked: initialChecked,
+          checked: Boolean(initialChecked),
           onchange: (e) => {
             const checked = e.target.checked;
             stateLabel.textContent = checked ? "On" : "Off";
@@ -62,31 +79,73 @@ const screen = {
       );
     }
 
-    section("connection", "Connection", () => [
+    const currentPort = Number(settings.port ?? getPort());
+    const portInput = h("input", {
+      class: "input settings__port-input",
+      type: "number",
+      min: "1024",
+      max: "65535",
+      value: String(currentPort),
+      "aria-label": "Daemon port",
+    });
+    const applyPortBtn = h("button", {
+      class: "btn btn--sm btn--primary",
+      type: "button",
+      hidden: true,
+      onClick: async () => {
+        const nextPort = Number(portInput.value);
+        if (!Number.isInteger(nextPort) || nextPort < 1024 || nextPort > 65535) {
+          toast({ message: "Port must be between 1024 and 65535." });
+          return;
+        }
+        applyPortBtn.disabled = true;
+        applyPortBtn.textContent = "Restarting...";
+        const res = await save({ port: nextPort }, "connection");
+        if (res?.restartRequired) {
+          setPort(nextPort);
+          toast({ message: `Switching to port ${nextPort}...` });
+          setTimeout(() => probeHealth(), 900);
+        }
+        applyPortBtn.disabled = false;
+        applyPortBtn.textContent = "Apply & restart";
+        applyPortBtn.hidden = true;
+      },
+    }, "Apply & restart");
+
+    portInput.addEventListener("input", () => {
+      const n = Number(portInput.value);
+      applyPortBtn.hidden = !Number.isInteger(n) || n === currentPort;
+    });
+
+    card("connection", "Connection", () => [
       h("div", { class: "settings__row" },
         h("div", { class: "settings__row-text" },
           h("span", { class: "t-body" }, "Daemon port"),
-          h("span", { class: "t-caption" }, "Changing this restarts the daemon automatically.")
+          h("span", { class: "t-caption" }, "Changing this restarts the Windows app on the new port.")
         ),
         h("div", { style: { display: "flex", gap: "var(--space-2)", alignItems: "center", flexWrap: "wrap" } },
-          h("span", { class: "code-token" }, String(settings.port ?? 31415)),
-          h("button", { class: "btn btn--quiet", type: "button", onClick: () => testConnection() }, "Test connection"),
-          h("button", { class: "btn btn--quiet", type: "button", onClick: () => restartDaemon() }, "Restart daemon")
+          portInput,
+          applyPortBtn,
+          h("button", { class: "btn btn--sm", type: "button", onClick: testConnection }, "Test connection"),
+          h("button", { class: "btn btn--sm", type: "button", onClick: restartDaemon }, "Restart app")
         )
       )
     ]);
 
-    section("expansion", "Expansion", (status) => [
+    card("expansion", "Expansion", (status) => [
       h("div", { class: "settings__row" },
         h("div", { class: "settings__row-text" },
-          h("span", { class: "t-body" }, "Terminator"),
-          h("span", { class: "t-caption" }, "Which key completes a trigger after typing it.")
+          h("span", { class: "t-body" }, "Terminator key"),
+          h("span", { class: "t-caption" }, "Key you press right after typing a trigger.")
         ),
         h("div", { class: "segmented", role: "radiogroup", "aria-label": "Terminator" },
           ...["space", "enter", "tab"].map((v) =>
             h("label", null,
               h("input", {
-                type: "radio", name: "terminator", value: v, checked: settings.terminator === v,
+                type: "radio",
+                name: "terminator",
+                value: v,
+                checked: settings.terminator === v,
                 onchange: () => { settings.terminator = v; save({ terminator: v }, "expansion", status); },
               }),
               h("span", null, v[0].toUpperCase() + v.slice(1))
@@ -97,107 +156,139 @@ const screen = {
       h("div", { class: "settings__row" },
         h("div", { class: "settings__row-text" },
           h("span", { class: "t-body" }, "Restore clipboard after paste"),
-          h("span", { class: "t-caption" }, "Puts your previous clipboard content back after expanding.")
+          h("span", { class: "t-caption" }, "Keeps your copied text, formatting, or images after expanding.")
         ),
         toggleSwitch(settings.restoreClipboard, (checked) => {
           settings.restoreClipboard = checked;
           save({ restoreClipboard: checked }, "expansion", status);
         })
+      ),
+      h("div", { class: "settings__row" },
+        h("div", { class: "settings__row-text" },
+          h("span", { class: "t-body" }, "Paste method"),
+          h("span", { class: "t-caption" }, "Clipboard paste keeps multi-line text and code symbols exact.")
+        ),
+        h("div", { class: "segmented", role: "radiogroup", "aria-label": "Paste method" },
+          ...[
+            { id: "clipboard", label: "Clipboard paste" },
+            { id: "unicode", label: "Direct typing" },
+          ].map((opt) =>
+            h("label", null,
+              h("input", {
+                type: "radio",
+                name: "injectionFallback",
+                value: opt.id,
+                checked: (settings.injectionFallback || "clipboard") === opt.id,
+                onchange: () => { settings.injectionFallback = opt.id; save({ injectionFallback: opt.id }, "expansion", status); },
+              }),
+              h("span", null, opt.label)
+            )
+          )
+        )
       )
     ]);
 
-    section("startup", "Startup", (status) => [
+    card("startup", "Startup & Privacy", (status) => [
       h("div", { class: "settings__row" },
         h("div", { class: "settings__row-text" },
           h("span", { class: "t-body" }, "Launch Mentions when I sign in"),
-          h("span", { class: "t-caption" }, "Starts the daemon at login so expansions always work.")
+          h("span", { class: "t-caption" }, "Starts the Windows tray app automatically on sign-in.")
         ),
         toggleSwitch(settings.autostart, (checked) => {
           settings.autostart = checked;
           save({ autostart: checked }, "startup", status);
         })
-      )
-    ]);
-
-    section("privacy", "Privacy", (status) => [
+      ),
       h("div", { class: "settings__row" },
         h("div", { class: "settings__row-text" },
-          h("span", { class: "t-body" }, "Show match counts"),
-          h("span", { class: "t-caption" }, "Off by default. Counts are local and never uploaded.")
+          h("span", { class: "t-body" }, "Local command storage"),
+          h("span", { class: "t-caption" }, "Saved only on this PC. Nothing is ever uploaded.")
         ),
-        toggleSwitch(settings.statsEnabled, (checked) => {
-          settings.statsEnabled = checked;
-          save({ statsEnabled: checked }, "privacy", status);
-        })
-      ),
-      h("p", { class: "t-caption" },
-        "Commands are stored on this machine at ",
-        h("span", { class: "code-token" }, "%APPDATA%\\Mentions\\commands.json"),
-        ". Nothing is uploaded."
+        h("div", { style: { display: "flex", gap: "var(--space-2)", alignItems: "center", flexWrap: "wrap" } },
+          h("span", { class: "code-token" }, "%APPDATA%\\Mentions\\commands.json"),
+          h("button", {
+            class: "btn btn--sm",
+            type: "button",
+            onClick: async () => {
+              try {
+                await navigator.clipboard.writeText("%APPDATA%\\Mentions\\commands.json");
+                toast({ message: "Path copied." });
+              } catch {}
+            },
+          }, "Copy path")
+        )
       )
     ]);
 
     const importFileInput = h("input", { id: "import-file", type: "file", accept: "application/json", hidden: true, onchange: onImport });
 
-    section("data", "Data", () => [
-      h("div", { style: { display: "flex", gap: "var(--space-2)", flexWrap: "wrap" } },
-        h("button", { class: "btn", type: "button", onClick: exportJSON }, "Export commands"),
-        h("button", { class: "btn", type: "button", onClick: () => importFileInput.click() }, "Import commands"),
-        importFileInput
+    card("data", "Backup & Data", () => [
+      h("div", { class: "settings__row" },
+        h("div", { class: "settings__row-text" },
+          h("span", { class: "t-body" }, "Commands backup"),
+          h("span", { class: "t-caption" }, `Currently ${state.commands.length} saved commands on this PC.`)
+        ),
+        h("div", { style: { display: "flex", gap: "var(--space-2)", flexWrap: "wrap" } },
+          h("button", { class: "btn btn--sm", type: "button", onClick: exportJSON }, "Export JSON"),
+          h("button", { class: "btn btn--sm", type: "button", onClick: () => importFileInput.click() }, "Import JSON"),
+          importFileInput
+        )
       )
     ]);
 
-    section("pairing", "Paired browsers", () => [
-      h("p", { class: "t-body" },
-        isDemoMode()
-          ? "Currently running in browser demo mode. Pair with a local daemon to sync and expand commands."
-          : "This browser is paired. To un-pair, use the Mentions tray menu or revoke all below."
-      ),
-      h("div", { style: { display: "flex", gap: "var(--space-2)", flexWrap: "wrap" } },
-        isDemoMode()
-          ? h("a", { class: "btn btn--primary", href: "/pair" }, "Pair with daemon")
-          : h("button", { class: "btn btn--quiet", type: "button", onClick: revokeAll }, "Revoke all browsers")
+    card("pairing", "Paired browsers", () => [
+      h("div", { class: "settings__row" },
+        h("div", { class: "settings__row-text" },
+          h("span", { class: "t-body" }, "This browser is paired"),
+          h("span", { class: "t-caption" }, "Revoking locks all connected tabs until paired again from the tray.")
+        ),
+        h("button", { class: "btn btn--sm btn--danger-outline", type: "button", onClick: revokeAll }, "Revoke all browsers")
       )
     ]);
 
     const versionStatusSlot = h("span", { class: "t-caption" }, "Checking for updates...");
 
-    section("diagnostics", "Diagnostics", () => [
-      h("dl", { style: { display: "grid", gridTemplateColumns: "max-content 1fr", gap: "var(--space-2) var(--space-4)", fontSize: "var(--fs-label)" } },
+    card("diagnostics", "Diagnostics", () => [
+      h("dl", { style: { display: "grid", gridTemplateColumns: "max-content 1fr", gap: "var(--space-2) var(--space-5)", fontSize: "var(--fs-label)", alignItems: "center" } },
         dt("Daemon version"), dd(state.health?.daemonVersion || "—"),
         dt("Update status"), dd(versionStatusSlot),
         dt("API version"), dd(state.health?.apiVersion || "—"),
         dt("Hook active"), dd(state.health?.hookActive ? "Yes" : "No"),
-        dt("State"), dd(state.health?.state || "—"),
+        dt("State"), dd(state.health?.state || "—")
       ),
       h("div", { style: { display: "flex", gap: "var(--space-2)", alignItems: "center", flexWrap: "wrap" } },
-        h("button", { class: "btn btn--quiet", type: "button", onClick: copyDiagnostics }, "Copy diagnostics"),
-        h("button", { class: "btn btn--quiet", type: "button", onClick: checkUpdateStatus }, "Check for updates")
+        h("button", { class: "btn btn--sm", type: "button", onClick: copyDiagnostics }, "Copy diagnostics"),
+        h("button", { class: "btn btn--sm", type: "button", onClick: checkUpdateStatus }, "Check for updates")
       )
     ]);
 
     container.replaceChildren(
-      h("h1", { id: "settings-h", class: "t-title", style: { marginBottom: "var(--space-4)" } }, "Settings"),
-      ...sections
+      h("h1", { id: "settings-h", class: "t-headline" }, "Settings"),
+      ...cards
     );
 
     if (loadErr) {
-      toast({ message: "Showing default settings — daemon is unreachable." });
+      toast({ message: "Showing last known settings." });
     }
 
     async function testConnection() {
+      const started = performance.now();
       try {
-        await request("/api/health", { auth: false, timeout: 1500, allowDemo: false });
-        toast({ message: "Daemon responded." });
-      } catch { toast({ message: "Daemon didn't respond." }); }
+        await request("/api/health", { auth: false, timeout: 1500 });
+        const ms = Math.max(1, Math.round(performance.now() - started));
+        toast({ message: `Connected in ${ms}ms.` });
+      } catch {
+        toast({ message: "Windows app didn't respond." });
+      }
     }
 
     async function restartDaemon() {
       try {
         await request("/api/daemon/restart", { method: "POST" });
-        toast({ message: "Daemon is restarting..." });
+        toast({ message: "Restarting Windows app..." });
+        setTimeout(() => probeHealth(), 1000);
       } catch {
-        toast({ message: "Couldn't send restart command." });
+        toast({ message: "Couldn't restart the app." });
       }
     }
 
@@ -215,15 +306,17 @@ const screen = {
           versionStatusSlot.replaceChildren(
             h("span", { style: { color: "var(--warning)", fontWeight: "600" } }, `v${latestTag} available (current: v${current})`),
             h("a", {
-              href: "https://github.com/umerhammaz/Mentions/releases/latest/download/mentions-daemon.exe",
+              href: DOWNLOAD_URL,
               target: "_blank",
               rel: "noopener",
-              class: "btn btn--quiet",
-              style: { marginLeft: "8px", height: "24px", paddingInline: "8px", display: "inline-flex" },
-            }, "Download v" + latestTag)
+              class: "btn btn--sm",
+              style: { marginLeft: "var(--space-2)" },
+            }, `Download v${latestTag}`)
           );
         } else {
-          versionStatusSlot.textContent = `Up to date (v${current || latestTag})`;
+          versionStatusSlot.replaceChildren(
+            h("span", { style: { color: "var(--success)" } }, `Up to date (v${current || latestTag})`)
+          );
         }
       } catch {
         versionStatusSlot.textContent = "Could not reach GitHub.";
@@ -261,13 +354,14 @@ const screen = {
     function revokeAll() {
       confirmDialog({
         title: "Revoke all paired browsers?",
-        body: "You'll need to pair again from this browser using the tray code.",
+        body: "This browser will lock immediately until you pair again using the tray code.",
         confirmLabel: "Revoke all",
         danger: true,
         onConfirm: async () => {
           try { await request("/api/pair/revoke-all", { method: "POST" }); } catch {}
           tokenClear(location.origin);
-          navigate("/pair");
+          set("commands", []);
+          set("health", { ...(state.health || {}), state: "unpaired", requiresPairing: true });
         },
       });
     }
@@ -278,7 +372,7 @@ const screen = {
     }
 
     function dt(t) { return h("dt", { style: { color: "var(--on-surface-variant)" } }, t); }
-    function dd(v) { return h("dd", { style: { fontFamily: "var(--font-mono)" } }, String(v)); }
+    function dd(v) { return h("dd", { style: { fontFamily: "var(--font-mono)" } }, v instanceof Node ? v : String(v)); }
 
     return { title: "Settings", unmount() {} };
   },

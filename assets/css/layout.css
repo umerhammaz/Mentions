@@ -9,16 +9,18 @@
     width: var(--rail-w);
     flex: none;
     border-right: var(--border-structure);
-    padding: var(--space-4) var(--space-2) var(--space-3);
+    padding: var(--space-5) var(--space-3) var(--space-4);
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    gap: var(--space-3);
-    background: var(--surface);
-    position: sticky;
+    gap: var(--space-4);
+    background: var(--surface-container);
+    position: fixed;
     top: 0;
-    height: 100vh;
-    z-index: 20;
+    left: 0;
+    bottom: 0;
+    z-index: 30;
+    overflow-y: auto;
   }
 
   .rail__top {
@@ -28,25 +30,31 @@
   }
 
   .rail__brand {
-    padding-inline: var(--space-2);
     display: flex;
     align-items: center;
+    justify-content: center;
+    padding: var(--space-1) var(--space-2) var(--space-4);
+    border-bottom: var(--border-structure);
   }
 
   .rail__brand-link {
     display: flex;
     align-items: center;
+    justify-content: center;
     width: 100%;
+    padding: var(--space-1);
+    border-radius: var(--radius-control);
     text-decoration: none;
   }
 
   .rail__logo {
     display: block;
-    width: 100%;
-    max-width: 170px;
+    width: auto;
+    max-width: 162px;
     height: auto;
     aspect-ratio: 300 / 60;
     object-fit: contain;
+    margin-inline: auto;
   }
 
   .appbar__title {
@@ -63,6 +71,7 @@
   }
 
   .rail__link {
+    position: relative;
     display: flex;
     align-items: center;
     gap: var(--space-3);
@@ -72,6 +81,7 @@
     font-size: var(--fs-label);
     font-weight: 500;
     text-decoration: none;
+    transition: background var(--dur-1) var(--ease-standard), color var(--dur-1) var(--ease-standard);
   }
   .rail__link:hover {
     background: color-mix(in oklab, var(--on-surface) 8%, transparent);
@@ -80,11 +90,22 @@
   .rail__link[aria-current="page"] {
     background: color-mix(in oklab, var(--accent) 14%, transparent);
     color: var(--on-surface);
+    font-weight: 600;
+  }
+  .rail__link[aria-current="page"]::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 6px;
+    bottom: 6px;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: var(--accent);
   }
 
   .rail__footer {
     padding-top: var(--space-3);
-    padding-inline: var(--space-2);
+    padding-inline: var(--space-1);
     border-top: var(--border-structure);
     display: flex;
     flex-direction: column;
@@ -106,32 +127,33 @@
   }
 
   .rail__pause-btn {
-    height: 30px;
-    padding-inline: var(--space-2);
-    font-size: var(--fs-caption);
-    color: var(--on-surface-variant);
-  }
-  .rail__pause-btn:hover {
-    color: var(--on-surface);
+    padding-inline: var(--space-3);
   }
 
-  .rail__download-btn {
-    width: 100%;
-    justify-content: center;
-    height: 32px;
-    font-size: var(--fs-caption);
-    text-decoration: none;
+  .rail__version {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--on-surface-variant);
+    padding-inline: var(--space-2);
+  }
+  .rail__version:empty {
+    display: none;
   }
 
   .workspace {
     flex: 1;
     min-width: 0;
+    min-height: 100vh;
+    margin-left: var(--rail-w);
     display: flex;
     flex-direction: column;
   }
 
   .banners {
-    padding: var(--space-4) var(--space-6) 0;
+    width: 100%;
+    max-width: 1160px;
+    margin-inline: auto;
+    padding: var(--space-4) var(--space-8) 0;
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
@@ -142,19 +164,33 @@
 
   main {
     flex: 1;
-    padding: var(--space-4) var(--space-6) var(--space-6);
+    width: 100%;
+    max-width: 1160px;
+    margin-inline: auto;
+    padding: var(--space-6) var(--space-8) var(--space-10);
     min-width: 0;
   }
   main:focus {
     outline: none;
   }
 
-  .split {
-    display: grid;
-    grid-template-columns: minmax(280px, 380px) 1fr;
-    gap: var(--space-6);
-    align-items: start;
-    min-height: 0;
+  body.is-locked .rail {
+    display: none;
+  }
+  body.is-locked .workspace {
+    margin-left: 0;
+    justify-content: center;
+    background: radial-gradient(circle at 50% 0%, color-mix(in oklab, var(--accent) 10%, transparent), transparent 55%);
+  }
+  body.is-locked .banners {
+    display: none;
+  }
+  body.is-locked main {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    max-width: 640px;
+    padding: var(--space-6) var(--space-4);
   }
 
   .toast-host {
@@ -178,15 +214,17 @@
     .rail {
       width: 100%;
       height: auto;
-      position: sticky;
+      position: fixed;
+      left: 0;
+      right: 0;
       bottom: 0;
       top: auto;
       flex-direction: row;
       align-items: center;
       border-right: 0;
       border-top: var(--border-structure);
-      padding: var(--space-2);
-      order: 10;
+      padding: var(--space-2) var(--space-3);
+      overflow: visible;
     }
     .rail__top {
       flex-direction: row;
@@ -207,29 +245,33 @@
       flex-direction: column;
       gap: 2px;
       font-size: var(--fs-caption);
+      padding: var(--space-1) var(--space-2);
+    }
+    .rail__link[aria-current="page"]::before {
+      display: none;
     }
     .rail__footer {
       padding-top: 0;
       border-top: 0;
-      border-left: 0;
-      padding-left: 0;
       display: flex;
+      flex-direction: row;
       align-items: center;
     }
-    .rail__download-btn {
+    .rail__version {
       display: none;
     }
     .workspace {
-      order: 1;
+      margin-left: 0;
+      padding-bottom: 76px;
+    }
+    body.is-locked .workspace {
+      padding-bottom: 0;
     }
     .banners {
       padding: var(--space-3) var(--space-4) 0;
     }
     main {
-      padding: var(--space-3) var(--space-4) var(--space-4);
-    }
-    .split {
-      grid-template-columns: 1fr;
+      padding: var(--space-4) var(--space-4) var(--space-6);
     }
   }
 
@@ -238,7 +280,7 @@
       padding: var(--space-2) var(--space-3) 0;
     }
     main {
-      padding: var(--space-2) var(--space-3) var(--space-3);
+      padding: var(--space-3) var(--space-3) var(--space-5);
     }
   }
 }

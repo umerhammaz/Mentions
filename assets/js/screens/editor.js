@@ -1,6 +1,6 @@
 import { h, useIcon } from "../dom.js";
-import { state, set, emit, tokenGet, tokenSet } from "../store.js";
-import { request, ApiError, DEMO_TOKEN } from "../api.js";
+import { state, set, emit } from "../store.js";
+import { request, ApiError } from "../api.js";
 import { navigate } from "../router.js";
 import { field, primaryButton, confirmDialog, toast, truncate, formatNum } from "../ui.js";
 import { focusFirstInvalid, announce } from "../a11y.js";
@@ -15,29 +15,14 @@ function normalizeTrigger(raw) {
   return cleaned ? `@${cleaned}` : "@";
 }
 
-function ensureEditableSession() {
-  const s = state.health?.state;
-  if (s !== "online" && s !== "paused" && s !== "demo") {
-    tokenSet(location.origin, DEMO_TOKEN);
-    set("health", {
-      apiVersion: "1.0",
-      daemonVersion: "demo",
-      hookActive: false,
-      paused: false,
-      requiresPairing: false,
-      versionMismatch: false,
-      demo: true,
-      state: "demo",
-      lastCheckedAt: Date.now(),
-    });
-  } else if (!tokenGet(location.origin)) {
-    tokenSet(location.origin, DEMO_TOKEN);
-  }
+function terminatorName() {
+  const t = state.settings?.terminator;
+  if (t === "enter") return "Enter";
+  if (t === "tab") return "Tab";
+  return "Space";
 }
 
 export async function renderEditor({ root, params }, { mode }) {
-  ensureEditableSession();
-
   const isNew = mode === "new";
   const container = h("section", { class: "editor", "aria-labelledby": "editor-h" });
   root.replaceChildren(container);
@@ -62,9 +47,11 @@ export async function renderEditor({ root, params }, { mode }) {
 
   if (!isNew && !existing) {
     container.replaceChildren(
-      h("h1", { id: "editor-h", class: "t-title" }, "Command not found"),
-      h("p", { class: "t-body" }, "This command may have been deleted or hasn't synced yet."),
-      h("div", null, h("a", { class: "btn btn--primary", href: "/" }, "Back to Commands"))
+      h("div", { class: "settings__card", style: { maxWidth: "480px" } },
+        h("h1", { id: "editor-h", class: "t-title" }, "Command not found"),
+        h("p", { class: "t-body", style: { color: "var(--on-surface-variant)" } }, "This command may have been deleted."),
+        h("div", null, h("a", { class: "btn btn--primary", href: "/" }, "Back to Commands"))
+      )
     );
     return { title: "Command not found", unmount() {} };
   }
@@ -83,6 +70,10 @@ export async function renderEditor({ root, params }, { mode }) {
   let showFullPreview = false;
   let countFrame = 0;
 
+  const existingGroups = Array.from(
+    new Set(state.commands.map((c) => (c.group || "").trim()).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b));
+
   const onBeforeUnload = (e) => {
     if (state.ui.dirty) {
       e.preventDefault();
@@ -92,11 +83,14 @@ export async function renderEditor({ root, params }, { mode }) {
   window.addEventListener("beforeunload", onBeforeUnload);
 
   const heading = isNew ? "Create command" : `Edit ${existing.trigger}`;
+  const dirtyBadge = h("span", { class: "editor__dirty-pill", hidden: true }, "Unsaved changes");
   const triggerErrSlot = h("div");
   const textErrSlot = h("div");
+  const hintPill = h("div", { class: "editor__hint-pill" });
   const previewHost = h("div", { class: "preview", hidden: true });
   const previewMoreSlot = h("div", { hidden: true });
-  const charCount = h("span", { class: "t-caption t-mono" }, `${formatNum(draft.text.length)} / ${MAX_TEXT_LABEL}`);
+  const panesHost = h("div", { class: "editor__panes" });
+  const statsLabel = h("span", { class: "t-caption t-mono" });
 
   const triggerInput = h("input", {
     id: "trigger",
@@ -104,17 +98,20 @@ export async function renderEditor({ root, params }, { mode }) {
     type: "text",
     value: draft.trigger.replace(/^@+/, ""),
     maxlength: "31",
+    placeholder: "sig",
     spellcheck: "false",
     autocomplete: "off",
     autocapitalize: "off",
-    oninput: (e) => {
+    onInput: (e) => {
       const stripped = e.target.value.replace(/^@+/, "").toLowerCase();
       if (e.target.value !== stripped) e.target.value = stripped;
       draft.trigger = stripped ? `@${stripped}` : "@";
       markDirty();
-      if (triggerInput.getAttribute("aria-invalid") === "true") setFieldError("trigger", triggerError());
+      updateLiveMeta();
+      const err = triggerError();
+      if (triggerInput.getAttribute("aria-invalid") === "true" || !err) setFieldError("trigger", err);
     },
-    onblur: () => {
+    onBlur: () => {
       const err = triggerError();
       setFieldError("trigger", err);
       if (err) announce(err);
@@ -125,19 +122,20 @@ export async function renderEditor({ root, params }, { mode }) {
     id: "text",
     class: "textarea",
     rows: "14",
+    placeholder: "Write the exact text to paste...",
     spellcheck: "false",
     autocomplete: "off",
     autocorrect: "off",
     autocapitalize: "off",
-    oninput: () => {
+    onInput: () => {
       markDirty();
-      scheduleCountUpdate();
+      scheduleMetaUpdate();
       if (textArea.getAttribute("aria-invalid") === "true") {
-        const len = getTextLength();
+        const len = textArea.value.length;
         if (len > 0 && len <= MAX_TEXT) setFieldError("text", null);
       }
     },
-    onblur: () => {
+    onBlur: () => {
       syncTextFromInput();
       const err = textError();
       setFieldError("text", err);
@@ -146,12 +144,18 @@ export async function renderEditor({ root, params }, { mode }) {
   });
   textArea.value = draft.text;
 
+  const groupDatalist = h("datalist", { id: "existing-groups" },
+    ...existingGroups.map((g) => h("option", { value: g }))
+  );
+
   const groupInput = h("input", {
     id: "group",
     class: "input",
     type: "text",
+    list: "existing-groups",
+    placeholder: "e.g. Email, Work, Prompts",
     value: draft.group,
-    oninput: (e) => {
+    onInput: (e) => {
       draft.group = e.target.value;
       markDirty();
     },
@@ -178,6 +182,14 @@ export async function renderEditor({ root, params }, { mode }) {
     onClick: () => switchTab("write"),
   }, "Write");
 
+  const splitTabBtn = h("button", {
+    type: "button",
+    class: "editor__tab",
+    role: "tab",
+    "aria-selected": "false",
+    onClick: () => switchTab("split"),
+  }, "Split");
+
   const previewTabBtn = h("button", {
     type: "button",
     class: "editor__tab",
@@ -188,7 +200,7 @@ export async function renderEditor({ root, params }, { mode }) {
 
   const fullScreenBtn = h("button", {
     type: "button",
-    class: "btn btn--quiet",
+    class: "btn btn--sm",
     onClick: () => {
       isFullScreen = !isFullScreen;
       container.classList.toggle("editor--full", isFullScreen);
@@ -199,7 +211,7 @@ export async function renderEditor({ root, params }, { mode }) {
 
   const copyPromptBtn = h("button", {
     type: "button",
-    class: "btn btn--quiet",
+    class: "btn btn--sm",
     onClick: async () => {
       syncTextFromInput();
       try {
@@ -216,96 +228,153 @@ export async function renderEditor({ root, params }, { mode }) {
   const triggerField = field({
     id: "trigger",
     label: "Trigger",
-    help: "Starts with @, lowercase letters, numbers, - and _. Must be unique.",
+    help: "Lowercase letters, numbers, - and _, up to 31 characters after @.",
     required: true,
     control: h("div", { class: "input-affix" }, h("span", { class: "input-affix__prefix" }, "@"), triggerInput),
   });
   triggerField.append(triggerErrSlot);
 
+  const groupChips = existingGroups.length > 0
+    ? h("div", { class: "editor__group-chips" },
+        ...existingGroups.slice(0, 6).map((g) =>
+          h("button", {
+            type: "button",
+            class: "pill",
+            onClick: () => {
+              groupInput.value = g;
+              draft.group = g;
+              markDirty();
+            },
+          }, g)
+        )
+      )
+    : null;
+
   const groupField = field({
     id: "group",
     label: "Group",
-    help: "Optional. Groups commands in the list.",
+    help: "Optional label to group commands.",
     optional: true,
-    control: groupInput,
+    control: h("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-2)" } },
+      groupInput,
+      groupDatalist,
+      groupChips
+    ),
   });
 
   const editorToolbar = h("div", { class: "editor__toolbar" },
-    h("div", { class: "editor__tabs", role: "tablist", "aria-label": "Editor mode" }, writeTabBtn, previewTabBtn),
+    h("div", { class: "editor__tabs", role: "tablist", "aria-label": "Editor mode" }, writeTabBtn, splitTabBtn, previewTabBtn),
     h("div", { style: { display: "flex", gap: "var(--space-2)", alignItems: "center", flexWrap: "wrap" } },
       copyPromptBtn,
       fullScreenBtn
     )
   );
 
+  panesHost.append(textArea, previewHost);
+
   const textField = field({
     id: "text",
-    label: "Prompt text",
-    help: "Kept exactly as typed, including spaces and line breaks.",
+    label: "Preset text",
+    help: "Saved exactly as typed, including spaces and line breaks.",
     required: true,
     control: h("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-2)" } },
       editorToolbar,
-      textArea,
-      previewHost,
+      panesHost,
       previewMoreSlot
     ),
   });
   textField.append(textErrSlot);
 
-  const form = h("form", { class: "editor__form", novalidate: true, onsubmit: onSubmit },
+  const form = h("form", { class: "editor__form", novalidate: true, onSubmit },
     h("div", { class: "editor__meta-row" }, triggerField, groupField),
+    hintPill,
     textField,
     h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "var(--space-3)", flexWrap: "wrap" } },
-      charCount,
+      statsLabel,
       enabledSwitch
     ),
     h("div", { class: "editor__actions" },
       !isNew ? h("button", {
-        class: "btn btn--quiet",
+        class: "btn btn--danger-outline",
         type: "button",
-        style: { color: "var(--danger)", marginInlineEnd: "auto" },
+        style: { marginInlineEnd: "auto" },
         onClick: onDelete,
       }, "Delete command") : null,
-      h("a", { class: "btn btn--quiet", href: "/" }, "Cancel"),
+      h("a", { class: "btn", href: "/" }, "Cancel"),
       submitBtn
     )
   );
 
   const head = h("header", { class: "editor__head" },
-    h("h1", { id: "editor-h", class: "t-title" }, heading),
-    h("a", { class: "btn btn--quiet", href: "/" }, "Back to Commands")
+    h("div", { class: "editor__title-row" },
+      h("h1", { id: "editor-h", class: "t-headline" }, heading),
+      dirtyBadge
+    ),
+    h("a", { class: "btn", href: "/" }, "Back to Commands")
   );
 
   container.replaceChildren(head, form);
+  updateLiveMeta();
 
-  function getTextLength() {
-    return typeof textArea.textLength === "number" ? textArea.textLength : textArea.value.length;
-  }
+  const onKeyDown = (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+      e.preventDefault();
+      form.requestSubmit();
+    } else if (e.key === "Escape" && isFullScreen) {
+      isFullScreen = false;
+      container.classList.remove("editor--full");
+      fullScreenBtn.textContent = "Full screen";
+    }
+  };
+  document.addEventListener("keydown", onKeyDown);
 
   function syncTextFromInput() {
     draft.text = textArea.value;
   }
 
   function markDirty() {
+    dirtyBadge.hidden = false;
     if (!state.ui.dirty) set("ui", { ...state.ui, dirty: true });
   }
 
-  function scheduleCountUpdate() {
+  function updateLiveMeta() {
+    const val = textArea.value;
+    const len = val.length;
+    const lines = val ? val.split(/\r\n|\r|\n/).length : 0;
+    const words = val.trim() ? val.trim().split(/\s+/).length : 0;
+    statsLabel.textContent = `Lines: ${formatNum(lines)} · Words: ${formatNum(words)} · Chars: ${formatNum(len)} / ${MAX_TEXT_LABEL}`;
+    statsLabel.style.color = len > MAX_TEXT ? "var(--danger)" : len > 55000 ? "var(--warning)" : "var(--on-surface-variant)";
+
+    const trig = normalizeTrigger(draft.trigger);
+    const term = terminatorName();
+    hintPill.replaceChildren(
+      "Type ",
+      h("span", { class: "code-token" }, trig === "@" ? "@trigger" : trig),
+      ` + ${term} → pastes ${formatNum(lines)} ${lines === 1 ? "line" : "lines"} (${formatNum(len)} chars)`
+    );
+    if (activeTab === "split") {
+      draft.text = val;
+      renderPreviewNow();
+    }
+  }
+
+  function scheduleMetaUpdate() {
     if (countFrame) return;
     countFrame = requestAnimationFrame(() => {
       countFrame = 0;
-      charCount.textContent = `${formatNum(getTextLength())} / ${MAX_TEXT_LABEL}`;
+      updateLiveMeta();
     });
   }
 
   function switchTab(nextTab) {
     activeTab = nextTab;
-    const isWrite = nextTab === "write";
-    writeTabBtn.setAttribute("aria-selected", isWrite ? "true" : "false");
-    previewTabBtn.setAttribute("aria-selected", isWrite ? "false" : "true");
-    textArea.hidden = !isWrite;
-    previewHost.hidden = isWrite;
-    if (isWrite) {
+    writeTabBtn.setAttribute("aria-selected", nextTab === "write" ? "true" : "false");
+    splitTabBtn.setAttribute("aria-selected", nextTab === "split" ? "true" : "false");
+    previewTabBtn.setAttribute("aria-selected", nextTab === "preview" ? "true" : "false");
+    panesHost.classList.toggle("editor__panes--split", nextTab === "split");
+    textArea.hidden = nextTab === "preview";
+    previewHost.hidden = nextTab === "write";
+    if (nextTab === "write") {
       previewMoreSlot.hidden = true;
       textArea.focus();
     } else {
@@ -325,7 +394,7 @@ export async function renderEditor({ root, params }, { mode }) {
     }
     const isCapped = !showFullPreview && raw.length > FAST_PREVIEW_LIMIT;
     const slice = isCapped ? raw.slice(0, FAST_PREVIEW_LIMIT) : raw;
-    const formatted = slice.replace(/ /g, "·").replace(/\n/g, "¶\n");
+    const formatted = slice.replace(/ /g, "·").replace(/\t/g, "→   ").replace(/\n/g, "¶\n");
     previewHost.textContent = isCapped
       ? `${formatted}\n\n... (${formatNum(raw.length - FAST_PREVIEW_LIMIT)} more characters)`
       : formatted;
@@ -335,7 +404,7 @@ export async function renderEditor({ root, params }, { mode }) {
       previewMoreSlot.replaceChildren(
         h("button", {
           type: "button",
-          class: "btn btn--quiet",
+          class: "btn btn--sm",
           onClick: () => {
             showFullPreview = true;
             renderPreviewNow();
@@ -372,7 +441,7 @@ export async function renderEditor({ root, params }, { mode }) {
   }
 
   function textError() {
-    const len = getTextLength();
+    const len = textArea.value.length;
     if (!len) return "Text is required.";
     if (len > MAX_TEXT) return `Text is over the ${MAX_TEXT} character limit.`;
     return null;
@@ -386,7 +455,6 @@ export async function renderEditor({ root, params }, { mode }) {
       confirmLabel: "Delete command",
       danger: true,
       onConfirm: async () => {
-        ensureEditableSession();
         try {
           await request(`/api/commands/${encodeURIComponent(existing.id)}`, { method: "DELETE" });
           const snapshot = existing;
@@ -432,11 +500,10 @@ export async function renderEditor({ root, params }, { mode }) {
     setFieldError("trigger", tErr);
     setFieldError("text", xErr);
     if (tErr || xErr) {
-      if (xErr && activeTab !== "write") switchTab("write");
+      if (xErr && activeTab === "preview") switchTab("write");
       focusFirstInvalid(container);
       return;
     }
-    ensureEditableSession();
     submitBtn.disabled = true;
     const original = submitBtn.textContent;
     submitBtn.textContent = "Saving...";
@@ -453,14 +520,15 @@ export async function renderEditor({ root, params }, { mode }) {
         saved = await request("/api/commands", { method: "POST", body });
         if (saved && !state.commands.some((c) => c.id === saved.id)) {
           set("commands", [...state.commands, saved]);
+          set("ui", { ...state.ui, selectedId: saved.id, dirty: false });
         }
       } else {
         saved = await request(`/api/commands/${encodeURIComponent(existing.id)}`, { method: "PATCH", body });
         if (saved) {
           set("commands", state.commands.map((c) => c.id === existing.id ? saved : c));
+          set("ui", { ...state.ui, selectedId: saved.id, dirty: false });
         }
       }
-      set("ui", { ...state.ui, dirty: false });
       emit("commands:changed");
       toast({ message: isNew ? `Created ${body.trigger}` : `Saved ${body.trigger}` });
       announce(isNew ? "Command created." : "Command saved.");
@@ -485,6 +553,7 @@ export async function renderEditor({ root, params }, { mode }) {
     title: isNew ? "Create command" : "Edit command",
     unmount() {
       if (countFrame) cancelAnimationFrame(countFrame);
+      document.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("beforeunload", onBeforeUnload);
       set("ui", { ...state.ui, dirty: false });
     },

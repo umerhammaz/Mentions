@@ -69,11 +69,4 @@ const initialCache = cacheLoad();
 if (Array.isArray(initialCache) && initialCache.length > 0) {
   state.commands = initialCache;
   state.cacheLoaded = true;
-} else {
-  const now = new Date().toISOString();
-  state.commands = [
-    { id: "demo-1", trigger: "@sig", text: "Best regards,\nAyesha Khan · Product", enabled: true, createdAt: now, updatedAt: now },
-    { id: "demo-2", trigger: "@thanks", text: "Thanks for the quick reply — I'll take a look this afternoon.", enabled: true, createdAt: now, updatedAt: now },
-  ];
-  cacheSave(state.commands);
 }

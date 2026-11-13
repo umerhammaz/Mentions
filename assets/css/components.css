@@ -245,11 +245,13 @@
   .toast {
     display: flex; align-items: center; gap: var(--space-3);
     padding: var(--space-3) var(--space-4);
-    background: var(--primary); color: var(--on-primary);
-    border-radius: var(--radius-container);
+    background: var(--surface-container-high); color: var(--on-surface);
+    border: var(--border-structure);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius-control);
     box-shadow: var(--surface-elev-2);
     font-size: var(--fs-label);
-    min-width: 240px;
+    min-width: 260px;
   }
   .toast button { color: var(--accent); font-weight: 600; padding-inline: var(--space-2); }
 

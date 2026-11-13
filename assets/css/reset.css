@@ -1,7 +1,7 @@
 @layer reset {
   *, *::before, *::after { box-sizing: border-box; }
   * { margin: 0; }
-  html, body { height: 100%; }
+  html { min-height: 100%; }
   body {
     font-family: var(--font-sans);
     font-size: var(--fs-body);
