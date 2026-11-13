@@ -21,7 +21,7 @@ function getCommandMeta(c) {
       lines,
       words,
       chars: text.length,
-      charsLabel: `${formatNum(lines)} ${lines === 1 ? "line" : "lines"} · ${formatNum(text.length)} chars`,
+      charsLabel: `${formatNum(lines)}L · ${formatNum(text.length)}c`,
       textSampleLower: text.slice(0, 4096).toLowerCase(),
     };
     rowMetaCache.set(c, meta);
@@ -52,7 +52,7 @@ const routeScreen = {
   async mount({ root }) {
     const mqDesktop = matchMedia("(min-width: 1040px)");
     let isDesktop = mqDesktop.matches;
-    let activePill = "all";
+    let activeTab = "all";
     let showSandbox = false;
     let showWhitespace = false;
     let filterTimer = null;
@@ -91,18 +91,17 @@ const routeScreen = {
 
     let searchInputEl = null;
     let clearBtnEl = null;
-    let kbdHintEl = null;
-    let pillsHostEl = null;
+    let tabsHostEl = null;
     let sandboxArea = null;
 
     function getFilteredCommands() {
       const filter = (state.ui.filter || "").toLowerCase().trim();
       const desc = state.ui.sort === "-trigger";
       return state.commands.filter((c) => {
-        if (activePill === "__enabled" && !c.enabled) return false;
-        if (activePill === "__paused" && c.enabled) return false;
-        if (activePill !== "all" && activePill !== "__enabled" && activePill !== "__paused") {
-          if ((c.group || "").toLowerCase() !== activePill.toLowerCase()) return false;
+        if (activeTab === "__enabled" && !c.enabled) return false;
+        if (activeTab === "__paused" && c.enabled) return false;
+        if (activeTab !== "all" && activeTab !== "__enabled" && activeTab !== "__paused") {
+          if ((c.group || "").toLowerCase() !== activeTab.toLowerCase()) return false;
         }
         if (!filter) return true;
         const meta = getCommandMeta(c);
@@ -121,7 +120,7 @@ const routeScreen = {
       return h("div", { class: "cmds__head" },
         h("div", { class: "cmds__title-group" },
           h("h1", { id: "cmds-h", class: "t-headline" }, "Commands"),
-          h("span", { class: "cmds__count-pill", role: "status" },
+          h("span", { class: "t-caption cmds__count", role: "status" },
             `${formatNum(total)} ${total === 1 ? "command" : "commands"} · ${formatNum(enabled)} active`
           )
         ),
@@ -160,8 +159,9 @@ const routeScreen = {
       const term = state.settings?.terminator || "space";
       const termKey = terminatorLabel(term);
       sandboxArea = h("textarea", {
+        id: "sandbox-input",
         class: "textarea cmds__sandbox-input",
-        placeholder: `Type any @trigger followed by ${termKey} here to preview how it expands...`,
+        placeholder: `Type any @trigger followed by ${termKey} here...`,
         onKeydown: (e) => {
           const isMatchKey =
             (term === "enter" && e.key === "Enter" && !e.shiftKey) ||
@@ -186,7 +186,7 @@ const routeScreen = {
       sandboxSlot.replaceChildren(
         h("div", { class: "cmds__sandbox" },
           h("div", { class: "cmds__sandbox-head" },
-            h("span", { class: "t-label", style: { fontWeight: "600" } }, `Live test box · press ${termKey} after a trigger`),
+            h("label", { class: "t-label", for: "sandbox-input", style: { fontWeight: "600" } }, `Live test box · press ${termKey} after a trigger`),
             h("button", {
               class: "btn btn--sm",
               type: "button",
@@ -204,7 +204,7 @@ const routeScreen = {
       if (state.commands.length === 0 && !state.ui.filter) {
         controlsSlot.replaceChildren();
         searchInputEl = null;
-        pillsHostEl = null;
+        tabsHostEl = null;
         return;
       }
       if (!searchInputEl) {
@@ -212,7 +212,7 @@ const routeScreen = {
           id: "filter",
           class: "input",
           type: "text",
-          placeholder: "Search @triggers, text, or groups...",
+          placeholder: "Filter by @trigger, text, or group",
           value: state.ui.filter || "",
           "aria-label": "Filter commands",
           onInput: (e) => {
@@ -236,7 +236,6 @@ const routeScreen = {
             searchInputEl.focus();
           },
         }, "×");
-        kbdHintEl = h("span", { class: "cmds__kbd", hidden: Boolean(state.ui.filter) }, "/");
         const desc = state.ui.sort === "-trigger";
         const sortBtn = h("button", {
           class: "btn",
@@ -244,33 +243,31 @@ const routeScreen = {
           onClick: () => {
             const nextDesc = state.ui.sort !== "-trigger";
             set("ui", { ...state.ui, sort: nextDesc ? "-trigger" : "trigger" });
-            sortBtn.textContent = nextDesc ? "Sort: Z → A" : "Sort: A → Z";
+            sortBtn.textContent = nextDesc ? "Trigger ↓" : "Trigger ↑";
             renderBodyOnly();
           },
-        }, desc ? "Sort: Z → A" : "Sort: A → Z");
-        pillsHostEl = h("div", { class: "cmds__pills" });
+        }, desc ? "Trigger ↓" : "Trigger ↑");
+        tabsHostEl = h("div", { class: "cmds__tabs" });
         controlsSlot.replaceChildren(
           h("div", { class: "cmds__search-bar" },
-            h("div", { class: "cmds__search-wrap" }, searchInputEl, kbdHintEl, clearBtnEl),
+            h("div", { class: "cmds__search-wrap" }, searchInputEl, clearBtnEl),
             sortBtn
           ),
-          pillsHostEl
+          tabsHostEl
         );
       } else if (document.activeElement !== searchInputEl && searchInputEl.value !== (state.ui.filter || "")) {
         searchInputEl.value = state.ui.filter || "";
         updateSearchDecor();
       }
-      renderPills();
+      renderTabs();
     }
 
     function updateSearchDecor() {
-      const hasText = Boolean(state.ui.filter);
-      if (clearBtnEl) clearBtnEl.hidden = !hasText;
-      if (kbdHintEl) kbdHintEl.hidden = hasText;
+      if (clearBtnEl) clearBtnEl.hidden = !state.ui.filter;
     }
 
-    function renderPills() {
-      if (!pillsHostEl) return;
+    function renderTabs() {
+      if (!tabsHostEl) return;
       const groups = new Map();
       let pausedCount = 0;
       let enabledCount = 0;
@@ -280,27 +277,27 @@ const routeScreen = {
         const g = (c.group || "").trim();
         if (g && !groups.has(g.toLowerCase())) groups.set(g.toLowerCase(), g);
       }
-      if (activePill !== "all" && activePill !== "__enabled" && activePill !== "__paused" && !groups.has(activePill.toLowerCase())) {
-        activePill = "all";
+      if (activeTab !== "all" && activeTab !== "__enabled" && activeTab !== "__paused" && !groups.has(activeTab.toLowerCase())) {
+        activeTab = "all";
       }
-      const pills = [
+      const tabs = [
         { id: "all", label: `All (${state.commands.length})` },
         { id: "__enabled", label: `Active (${enabledCount})` },
         ...(pausedCount > 0 ? [{ id: "__paused", label: `Paused (${pausedCount})` }] : []),
         ...Array.from(groups.values()).sort((a, b) => a.localeCompare(b)).map((g) => ({ id: g, label: g })),
       ];
-      pillsHostEl.replaceChildren(
-        ...pills.map((p) =>
+      tabsHostEl.replaceChildren(
+        ...tabs.map((t) =>
           h("button", {
             type: "button",
-            class: "pill",
-            "aria-pressed": activePill.toLowerCase() === p.id.toLowerCase() ? "true" : "false",
+            class: "tab-btn",
+            "aria-pressed": activeTab.toLowerCase() === t.id.toLowerCase() ? "true" : "false",
             onClick: () => {
-              activePill = p.id;
-              renderPills();
+              activeTab = t.id;
+              renderTabs();
               renderBodyOnly();
             },
-          }, p.label)
+          }, t.label)
         )
       );
     }
@@ -404,12 +401,12 @@ const routeScreen = {
       ];
     }
 
-    function buildCard(c, selectedId) {
+    function buildRow(c, selectedId) {
       const meta = getCommandMeta(c);
       const isSelected = isDesktop && c.id === selectedId;
       const editHref = `/commands/${encodeURIComponent(c.id)}`;
       return h("div", {
-        class: "cmd-card",
+        class: "cmd-row",
         "data-key": c.id,
         "aria-selected": isSelected ? "true" : "false",
         tabindex: "0",
@@ -427,16 +424,16 @@ const routeScreen = {
           navigate(editHref);
         },
       },
-        h("div", { class: "cmd-card__body" },
-          h("div", { class: "cmd-card__top" },
+        h("div", { class: "cmd-row__body" },
+          h("div", { class: "cmd-row__top" },
             h("span", { class: "code-token" }, c.trigger),
-            c.group ? h("span", { class: "chip", style: { background: "var(--surface-container-high)", borderRadius: "var(--radius-pill)", padding: "2px 8px" } }, c.group) : null,
+            c.group ? h("span", { class: "cmd-row__group" }, c.group) : null,
             !c.enabled ? h("span", { class: "chip chip--warning" }, h("span", { class: "chip__dot" }), "Paused") : null
           ),
-          h("div", { class: "cmd-card__preview" }, meta.preview),
-          h("div", { class: "cmd-card__meta" }, meta.charsLabel)
+          h("div", { class: "cmd-row__preview" }, meta.preview)
         ),
-        h("div", { class: "cmd-card__side" },
+        h("div", { class: "cmd-row__side" },
+          h("span", { class: "cmd-row__meta" }, meta.charsLabel),
           h("label", {
             class: "switch",
             title: c.enabled ? "Pause command" : "Enable command",
@@ -463,23 +460,24 @@ const routeScreen = {
       const displayText = showWhitespace
         ? rawText.replace(/ /g, "·").replace(/\t/g, "→   ").replace(/\n/g, "¶\n")
         : rawText;
+      const updatedLabel = formatDate(c.updatedAt);
 
       return h("aside", { class: "cmds__inspector", "aria-label": "Selected command" },
         h("div", { class: "inspector__head" },
-          h("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-2)" } },
+          h("div", { class: "inspector__title-row" },
             h("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" } },
               h("span", { class: "code-token" }, c.trigger),
-              c.group ? h("span", { class: "chip", style: { background: "var(--surface-container-high)", borderRadius: "var(--radius-pill)", padding: "2px 8px" } }, c.group) : null,
-              h("span", { class: `chip ${c.enabled ? "chip--success" : "chip--warning"}` },
-                h("span", { class: "chip__dot" }),
-                c.enabled ? "Active" : "Paused"
-              )
+              c.group ? h("span", { class: "cmd-row__group" }, c.group) : null
             ),
-            h("span", { class: "t-caption" }, `Type ${c.trigger} + ${termKey} anywhere to paste`)
-          )
+            h("span", { class: `chip ${c.enabled ? "chip--success" : "chip--warning"}` },
+              h("span", { class: "chip__dot" }),
+              c.enabled ? "Active" : "Paused"
+            )
+          ),
+          h("span", { class: "t-caption" }, `Type ${c.trigger} + ${termKey} to expand`)
         ),
         h("div", { class: "inspector__actions" },
-          h("a", { class: "btn btn--primary btn--sm", href: `/commands/${encodeURIComponent(c.id)}` }, "Edit command"),
+          h("a", { class: "btn btn--primary btn--sm", href: `/commands/${encodeURIComponent(c.id)}` }, "Edit"),
           h("button", {
             class: "btn btn--sm",
             type: "button",
@@ -491,7 +489,7 @@ const routeScreen = {
                 toast({ message: "Couldn't copy text." });
               }
             },
-          }, "Copy text"),
+          }, "Copy"),
           h("button", { class: "btn btn--sm", type: "button", onClick: () => duplicateCommand(c) }, "Duplicate"),
           h("button", {
             class: "btn btn--sm btn--danger-outline",
@@ -509,12 +507,12 @@ const routeScreen = {
               showWhitespace = !showWhitespace;
               renderBodyOnly();
             },
-          }, showWhitespace ? "Hide marks" : "Show spaces & breaks")
+          }, showWhitespace ? "Hide marks" : "Show marks")
         ),
         h("pre", { class: "inspector__preview" }, displayText || "(empty)"),
         h("div", { class: "meta", style: { justifyContent: "space-between", flexWrap: "wrap" } },
           h("span", null, `${formatNum(meta.lines)} lines · ${formatNum(meta.words)} words · ${formatNum(meta.chars)} chars`),
-          c.updatedAt ? h("span", null, `Updated ${formatDate(c.updatedAt)}`) : null
+          updatedLabel ? h("span", null, `Updated ${updatedLabel}`) : null
         )
       );
     }
@@ -526,7 +524,7 @@ const routeScreen = {
           h("div", { class: "empty" },
             h("h2", { class: "t-title" }, "No commands yet"),
             h("p", { class: "t-body", style: { color: "var(--on-surface-variant)" } },
-              `Create a trigger like @sig. Whenever you type it and press ${termKey}, your saved text replaces it in any app.`
+              `Create a trigger like @sig. Type it and press ${termKey} in any Windows app to replace it.`
             ),
             h("div", { class: "empty__example" }, h("strong", null, "@sig"), " → Best regards,\nAyesha Khan · Product"),
             h("div", { class: "empty__actions" },
@@ -541,7 +539,7 @@ const routeScreen = {
       const filtered = getFilteredCommands();
       if (filtered.length === 0) {
         bodySlot.replaceChildren(
-          h("div", { class: "settings__card", style: { maxWidth: "520px" } },
+          h("div", { class: "settings__card", style: { maxWidth: "480px" } },
             h("p", { class: "t-body", style: { color: "var(--on-surface-variant)" } },
               "No commands match your filter."
             ),
@@ -550,11 +548,11 @@ const routeScreen = {
                 class: "btn btn--sm",
                 type: "button",
                 onClick: () => {
-                  activePill = "all";
+                  activeTab = "all";
                   set("ui", { ...state.ui, filter: "" });
                   if (searchInputEl) searchInputEl.value = "";
                   updateSearchDecor();
-                  renderPills();
+                  renderTabs();
                   renderBodyOnly();
                 },
               }, "Reset filters")
@@ -570,8 +568,8 @@ const routeScreen = {
         set("ui", { ...state.ui, selectedId: selected.id });
       }
 
-      const listEl = h("div", { class: "cmds__list", role: "list" },
-        ...filtered.map((c) => buildCard(c, selected.id))
+      const listEl = h("div", { class: "cmds__list-box", role: "list" },
+        ...filtered.map((c) => buildRow(c, selected.id))
       );
 
       if (isDesktop) {

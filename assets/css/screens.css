@@ -6,24 +6,17 @@
   }
   .cmds__head {
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     justify-content: space-between;
     gap: var(--space-4);
     flex-wrap: wrap;
   }
   .cmds__title-group {
     display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    flex-wrap: wrap;
+    flex-direction: column;
+    gap: 2px;
   }
-  .cmds__count-pill {
-    padding: 3px var(--space-3);
-    border-radius: var(--radius-pill);
-    background: var(--surface-container);
-    border: var(--border-structure);
-    color: var(--on-surface-variant);
-    font-size: var(--fs-caption);
+  .cmds__count {
     font-variant-numeric: tabular-nums;
   }
   .cmds__head-actions {
@@ -47,24 +40,10 @@
     position: relative;
     flex: 1;
     min-width: 220px;
-    max-width: 480px;
+    max-width: 440px;
   }
   .cmds__search-wrap .input {
-    padding-right: 68px;
-  }
-  .cmds__kbd {
-    position: absolute;
-    right: var(--space-2);
-    top: 50%;
-    transform: translateY(-50%);
-    padding: 2px 6px;
-    border-radius: 5px;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--on-surface-variant);
-    background: var(--surface-container-high);
-    border: var(--border-structure);
-    pointer-events: none;
+    padding-right: 36px;
   }
   .cmds__clear-btn {
     position: absolute;
@@ -73,7 +52,7 @@
     transform: translateY(-50%);
     width: 26px;
     height: 26px;
-    border-radius: 6px;
+    border-radius: var(--radius-control);
     color: var(--on-surface-variant);
     display: inline-flex;
     align-items: center;
@@ -83,30 +62,31 @@
     background: var(--surface-container-high);
     color: var(--on-surface);
   }
-  .cmds__pills {
+  .cmds__tabs {
     display: flex;
     align-items: center;
-    gap: var(--space-2);
+    gap: var(--space-1);
     flex-wrap: wrap;
+    border-bottom: var(--border-structure);
+    padding-bottom: var(--space-2);
   }
-  .pill {
+  .tab-btn {
     height: 30px;
     padding-inline: var(--space-3);
-    border-radius: var(--radius-pill);
-    border: var(--border-structure);
-    background: var(--surface-container);
+    border-radius: var(--radius-control);
+    border: 1px solid transparent;
+    background: transparent;
     color: var(--on-surface-variant);
-    font-size: var(--fs-caption);
+    font-size: var(--fs-label);
     font-weight: 500;
-    transition: background var(--dur-1) var(--ease-standard), color var(--dur-1) var(--ease-standard);
   }
-  .pill:hover {
+  .tab-btn:hover {
     color: var(--on-surface);
-    border-color: var(--outline);
+    background: var(--surface-container);
   }
-  .pill[aria-pressed="true"] {
-    background: color-mix(in oklab, var(--accent) 16%, var(--surface-container));
-    border-color: color-mix(in oklab, var(--accent) 45%, transparent);
+  .tab-btn[aria-pressed="true"] {
+    background: var(--surface-container-high);
+    border-color: var(--outline-variant);
     color: var(--on-surface);
   }
   .cmds__sandbox {
@@ -134,44 +114,47 @@
     gap: var(--space-5);
     align-items: start;
   }
-  .cmds__list {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
+  .cmds__list-box {
+    border: var(--border-structure);
+    border-radius: var(--radius-container);
+    background: var(--surface-container);
+    overflow: hidden;
   }
-  .cmd-card {
+  .cmd-row {
     display: flex;
     align-items: center;
     gap: var(--space-3);
     padding: var(--space-3) var(--space-4);
-    border: var(--border-structure);
-    border-radius: var(--radius-container);
-    background: var(--surface-container);
+    border-bottom: var(--border-structure);
     cursor: pointer;
-    transition: border-color var(--dur-1) var(--ease-standard), background var(--dur-1) var(--ease-standard);
   }
-  .cmd-card:hover {
+  .cmd-row:last-child {
+    border-bottom: 0;
+  }
+  .cmd-row:hover {
     background: color-mix(in oklab, var(--on-surface) 3%, var(--surface-container));
-    border-color: var(--outline);
   }
-  .cmd-card[aria-selected="true"] {
-    border-color: color-mix(in oklab, var(--accent) 60%, transparent);
-    background: color-mix(in oklab, var(--accent) 7%, var(--surface-container));
+  .cmd-row[aria-selected="true"] {
+    background: var(--surface-container-high);
   }
-  .cmd-card__body {
+  .cmd-row__body {
     flex: 1;
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 3px;
   }
-  .cmd-card__top {
+  .cmd-row__top {
     display: flex;
     align-items: center;
     gap: var(--space-2);
     flex-wrap: wrap;
   }
-  .cmd-card__preview {
+  .cmd-row__group {
+    font-size: var(--fs-caption);
+    color: var(--on-surface-variant);
+  }
+  .cmd-row__preview {
     color: var(--on-surface-variant);
     font-size: var(--fs-label);
     line-height: var(--lh-label);
@@ -179,14 +162,12 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .cmd-card__meta {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
+  .cmd-row__meta {
     font-size: var(--fs-caption);
     color: var(--on-surface-variant);
+    font-variant-numeric: tabular-nums;
   }
-  .cmd-card__side {
+  .cmd-row__side {
     display: flex;
     align-items: center;
     gap: var(--space-2);
@@ -205,9 +186,14 @@
   }
   .inspector__head {
     display: flex;
-    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .inspector__title-row {
+    display: flex;
+    align-items: center;
     justify-content: space-between;
-    gap: var(--space-3);
+    gap: var(--space-2);
     flex-wrap: wrap;
   }
   .inspector__actions {
@@ -258,17 +244,14 @@
   }
   .editor__title-row {
     display: flex;
-    align-items: center;
+    align-items: baseline;
     gap: var(--space-3);
     flex-wrap: wrap;
   }
-  .editor__dirty-pill {
-    padding: 2px var(--space-2);
-    border-radius: var(--radius-pill);
-    background: color-mix(in oklab, var(--warning) 16%, transparent);
-    color: var(--warning);
-    border: 1px solid color-mix(in oklab, var(--warning) 36%, transparent);
+  .editor__dirty {
     font-size: var(--fs-caption);
+    color: var(--warning);
+    font-weight: 500;
   }
   .editor__meta-row {
     display: grid;
@@ -285,22 +268,27 @@
     border: var(--border-structure);
     border-radius: var(--radius-container);
   }
-  .editor__hint-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-1) var(--space-3);
-    border-radius: var(--radius-control);
-    background: var(--surface);
-    border: var(--border-structure);
+  .editor__hint {
     font-size: var(--fs-caption);
     color: var(--on-surface-variant);
-    align-self: flex-start;
   }
-  .editor__group-chips {
+  .editor__group-tags {
     display: flex;
     gap: var(--space-1);
     flex-wrap: wrap;
+  }
+  .tag-btn {
+    height: 26px;
+    padding-inline: var(--space-2);
+    border-radius: 4px;
+    border: var(--border-structure);
+    background: var(--surface);
+    color: var(--on-surface-variant);
+    font-size: var(--fs-caption);
+  }
+  .tag-btn:hover {
+    color: var(--on-surface);
+    border-color: var(--outline);
   }
   .editor__toolbar {
     display: flex;
@@ -324,7 +312,7 @@
     align-items: center;
     height: 30px;
     padding-inline: var(--space-3);
-    border-radius: 6px;
+    border-radius: 4px;
     font-size: var(--fs-label);
     font-weight: 500;
     color: var(--on-surface-variant);
@@ -347,7 +335,7 @@
     align-items: center;
     justify-content: flex-end;
     flex-wrap: wrap;
-    padding-top: var(--space-2);
+    padding-top: var(--space-3);
     border-top: var(--border-structure);
   }
 
@@ -401,23 +389,21 @@
 
   .gate {
     width: 100%;
-    max-width: 540px;
+    max-width: 480px;
     display: flex;
     flex-direction: column;
     gap: var(--space-5);
   }
   .gate__brand {
     display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-3);
+    justify-content: center;
   }
   .gate__logo {
     width: auto;
-    max-width: 210px;
+    max-width: 196px;
     height: auto;
   }
-  .gate__card {
+  .gate__panel {
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
@@ -425,62 +411,49 @@
     background: var(--surface-container);
     border: var(--border-structure);
     border-radius: var(--radius-container);
-    box-shadow: var(--surface-elev-2);
   }
-  .gate__badge {
-    align-self: flex-start;
-    display: inline-flex;
+  .gate__status {
+    display: flex;
     align-items: center;
     gap: var(--space-2);
-    padding: 4px var(--space-3);
-    border-radius: var(--radius-pill);
     font-size: var(--fs-caption);
-    font-weight: 500;
-    background: var(--surface-container-high);
-    border: var(--border-structure);
+    color: var(--on-surface-variant);
+    font-variant-numeric: tabular-nums;
   }
-  .gate__badge--ok {
-    color: var(--success);
-    border-color: color-mix(in oklab, var(--success) 35%, transparent);
-    background: color-mix(in oklab, var(--success) 10%, var(--surface-container));
+  .gate__dot {
+    width: 6px;
+    height: 6px;
+    flex: none;
+    background: var(--on-surface-variant);
   }
-  .gate__badge--warn {
-    color: var(--warning);
-    border-color: color-mix(in oklab, var(--warning) 35%, transparent);
-    background: color-mix(in oklab, var(--warning) 10%, var(--surface-container));
+  .gate__dot--ok {
+    background: var(--success);
   }
-  .gate__badge--danger {
-    color: var(--danger);
-    border-color: color-mix(in oklab, var(--danger) 35%, transparent);
-    background: color-mix(in oklab, var(--danger) 10%, var(--surface-container));
+  .gate__dot--warn {
+    background: var(--warning);
   }
-  .gate__steps {
+  .gate__dot--danger {
+    background: var(--danger);
+  }
+  .gate__list {
     display: flex;
     flex-direction: column;
-    gap: var(--space-3);
-    padding: var(--space-4);
-    background: var(--surface);
-    border: var(--border-structure);
-    border-radius: var(--radius-control);
+    gap: var(--space-2);
+    padding-top: var(--space-2);
+    border-top: var(--border-structure);
   }
-  .gate__step {
+  .gate__list-item {
     display: flex;
-    align-items: flex-start;
+    align-items: baseline;
     gap: var(--space-3);
+    font-size: var(--fs-label);
+    color: var(--on-surface-variant);
   }
-  .gate__step-num {
-    width: 24px;
-    height: 24px;
-    flex: none;
-    border-radius: var(--radius-pill);
-    background: color-mix(in oklab, var(--accent) 16%, var(--surface-container-high));
-    color: var(--accent);
+  .gate__num {
     font-family: var(--font-mono);
     font-size: var(--fs-caption);
-    font-weight: 600;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+    color: var(--on-surface);
+    flex: none;
   }
   .gate__footer {
     display: flex;
@@ -523,7 +496,7 @@
     .editor--full {
       padding: var(--space-3);
     }
-    .gate__card,
+    .gate__panel,
     .settings__card,
     .editor__form {
       padding: var(--space-4);

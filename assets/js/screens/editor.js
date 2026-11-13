@@ -83,10 +83,10 @@ export async function renderEditor({ root, params }, { mode }) {
   window.addEventListener("beforeunload", onBeforeUnload);
 
   const heading = isNew ? "Create command" : `Edit ${existing.trigger}`;
-  const dirtyBadge = h("span", { class: "editor__dirty-pill", hidden: true }, "Unsaved changes");
+  const dirtyBadge = h("span", { class: "editor__dirty", hidden: true }, "Unsaved changes");
   const triggerErrSlot = h("div");
   const textErrSlot = h("div");
-  const hintPill = h("div", { class: "editor__hint-pill" });
+  const hintLine = h("div", { class: "editor__hint" });
   const previewHost = h("div", { class: "preview", hidden: true });
   const previewMoreSlot = h("div", { hidden: true });
   const panesHost = h("div", { class: "editor__panes" });
@@ -235,11 +235,11 @@ export async function renderEditor({ root, params }, { mode }) {
   triggerField.append(triggerErrSlot);
 
   const groupChips = existingGroups.length > 0
-    ? h("div", { class: "editor__group-chips" },
+    ? h("div", { class: "editor__group-tags" },
         ...existingGroups.slice(0, 6).map((g) =>
           h("button", {
             type: "button",
-            class: "pill",
+            class: "tag-btn",
             onClick: () => {
               groupInput.value = g;
               draft.group = g;
@@ -287,7 +287,7 @@ export async function renderEditor({ root, params }, { mode }) {
 
   const form = h("form", { class: "editor__form", novalidate: true, onSubmit },
     h("div", { class: "editor__meta-row" }, triggerField, groupField),
-    hintPill,
+    hintLine,
     textField,
     h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "var(--space-3)", flexWrap: "wrap" } },
       statsLabel,
@@ -347,7 +347,7 @@ export async function renderEditor({ root, params }, { mode }) {
 
     const trig = normalizeTrigger(draft.trigger);
     const term = terminatorName();
-    hintPill.replaceChildren(
+    hintLine.replaceChildren(
       "Type ",
       h("span", { class: "code-token" }, trig === "@" ? "@trigger" : trig),
       ` + ${term} → pastes ${formatNum(lines)} ${lines === 1 ? "line" : "lines"} (${formatNum(len)} chars)`

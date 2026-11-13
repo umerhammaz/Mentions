@@ -50,8 +50,8 @@
   .btn:active { background: color-mix(in oklab, var(--on-surface) 14%, var(--surface-container-high)); }
   .btn:disabled, .btn[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
   .btn--sm { height: 30px; padding-inline: var(--space-2); font-size: var(--fs-caption); }
-  .btn--primary { background: var(--accent); color: var(--on-accent); border-color: transparent; font-weight: 600; }
-  .btn--primary:hover { background: color-mix(in oklab, white 10%, var(--accent)); border-color: transparent; }
+  .btn--primary { background: var(--primary); color: var(--on-primary); border-color: transparent; font-weight: 600; }
+  .btn--primary:hover { background: color-mix(in oklab, var(--on-primary) 8%, var(--primary)); border-color: transparent; }
   .btn--quiet { background: transparent; border-color: transparent; }
   .btn--quiet:hover { background: color-mix(in oklab, var(--on-surface) 8%, transparent); border-color: transparent; }
   .btn--danger { color: var(--on-danger); background: var(--danger); border-color: transparent; }
@@ -75,10 +75,10 @@
   .code-token {
     font-family: var(--font-mono); font-size: var(--fs-mono); line-height: var(--lh-mono);
     padding: 2px var(--space-2);
-    background: color-mix(in oklab, var(--accent) 12%, var(--surface-container-high));
-    border: 1px solid color-mix(in oklab, var(--accent) 26%, transparent);
-    border-radius: 6px;
-    color: var(--accent);
+    background: var(--surface-container-high);
+    border: var(--border-structure);
+    border-radius: 4px;
+    color: var(--on-surface);
     white-space: nowrap;
   }
 }

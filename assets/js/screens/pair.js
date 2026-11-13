@@ -49,12 +49,19 @@ const screen = {
         h("img", { class: "gate__logo", src: "/assets/mentions_logo.png", alt: "Mentions", width: "300", height: "60" })
       )
     );
-    const cardHost = h("div");
-    wrap.append(cardHost);
+    const panelHost = h("div");
+    wrap.append(panelHost);
     root.replaceChildren(wrap);
 
     let lastRenderedKind = "";
     let autoSubmitting = false;
+
+    function statusRow(tone, label) {
+      return h("div", { class: "gate__status" },
+        h("span", { class: `gate__dot gate__dot--${tone}`, "aria-hidden": "true" }),
+        h("span", null, label)
+      );
+    }
 
     function buildRescueBanner() {
       const saved = state.ui?.unsavedRescue;
@@ -83,10 +90,10 @@ const screen = {
 
     function renderConnecting() {
       const rescue = buildRescueBanner();
-      cardHost.replaceChildren(
+      panelHost.replaceChildren(
         rescue || "",
-        h("div", { class: "gate__card" },
-          h("span", { class: "gate__badge" }, `Checking port ${getPort()}...`),
+        h("div", { class: "gate__panel" },
+          statusRow("warn", `Checking 127.0.0.1:${getPort()}`),
           h("h1", { id: "gate-h", class: "t-headline" }, "Connecting to Mentions"),
           h("p", { class: "t-body", style: { color: "var(--on-surface-variant)" } },
             "Looking for the Windows background app on this PC."
@@ -102,8 +109,8 @@ const screen = {
         href: DOWNLOAD_URL,
         target: "_blank",
         rel: "noopener",
-        style: { width: "100%", height: "42px" },
-      }, "Download Mentions for Windows (.exe)");
+        style: { width: "100%", height: "40px" },
+      }, "Download for Windows (.exe)");
 
       const checkBtn = h("button", {
         class: "btn btn--sm",
@@ -119,14 +126,15 @@ const screen = {
 
       let portOpen = false;
       const portInput = h("input", {
+        id: "gate-port",
         class: "input settings__port-input",
         type: "number",
         min: "1024",
         max: "65535",
         value: String(getPort()),
-        "aria-label": "Custom daemon port",
       });
       const portRow = h("div", { class: "gate__port-row", hidden: true },
+        h("label", { class: "t-caption", for: "gate-port" }, "Port"),
         portInput,
         h("button", {
           class: "btn btn--sm",
@@ -139,7 +147,7 @@ const screen = {
             }
             await probeHealth();
           },
-        }, "Use port")
+        }, "Apply")
       );
 
       const portToggle = h("button", {
@@ -148,30 +156,40 @@ const screen = {
         onClick: () => {
           portOpen = !portOpen;
           portRow.hidden = !portOpen;
+          if (portOpen) portInput.focus();
         },
       }, "Custom port");
 
-      cardHost.replaceChildren(
+      panelHost.replaceChildren(
         rescue || "",
-        h("div", { class: "gate__card" },
-          h("span", { class: "gate__badge gate__badge--warn" }, `Windows app not detected on port ${getPort()}`),
-          h("h1", { id: "gate-h", class: "t-headline" }, "Install & start Mentions"),
+        h("div", { class: "gate__panel" },
+          statusRow("warn", `Not running on 127.0.0.1:${getPort()}`),
+          h("h1", { id: "gate-h", class: "t-headline" }, "Install and start Mentions"),
           h("p", { class: "t-body", style: { color: "var(--on-surface-variant)" } },
-            "Mentions requires the Windows tray app running on this PC so your @commands stay private and work in every app."
+            "Mentions requires the Windows tray app on this PC so @commands expand in every app and stay local."
           ),
           pendingCode
-            ? h("p", { class: "t-caption", style: { color: "var(--accent)" } },
-                `Code ${pendingCode} is ready — it will pair automatically as soon as the app starts.`
+            ? h("p", { class: "t-caption", style: { color: "var(--on-surface)" } },
+                `Pairing code ${pendingCode} is saved and will connect automatically when the app starts.`
               )
             : null,
           downloadBtn,
-          h("div", { class: "gate__steps" },
-            step(1, "Download and run mentions-daemon.exe", "Single file, no setup wizard — it sits quietly near your Windows clock."),
-            step(2, "Open the tray menu and click Pair Browser", "Right-click or double-click the Mentions tray icon."),
-            step(3, "This screen connects automatically", "We keep checking every 2 seconds and jump straight to pairing when the app starts.")
+          h("ol", { class: "gate__list" },
+            h("li", { class: "gate__list-item" },
+              h("span", { class: "gate__num" }, "01"),
+              h("span", null, "Download and run mentions-daemon.exe (sits in the Windows tray).")
+            ),
+            h("li", { class: "gate__list-item" },
+              h("span", { class: "gate__num" }, "02"),
+              h("span", null, "Right-click the tray icon and select Pair Browser.")
+            ),
+            h("li", { class: "gate__list-item" },
+              h("span", { class: "gate__num" }, "03"),
+              h("span", null, "This page detects the app automatically once it starts.")
+            )
           ),
           h("div", { class: "gate__footer" },
-            h("span", { class: "t-caption" }, `Waiting for 127.0.0.1:${getPort()}...`),
+            h("span", { class: "t-caption" }, `Checking 127.0.0.1:${getPort()}...`),
             h("div", { style: { display: "flex", gap: "var(--space-2)", alignItems: "center" } },
               portToggle,
               checkBtn
@@ -192,19 +210,19 @@ const screen = {
 
     function renderVersionMismatch(hh) {
       const currentVer = hh?.daemonVersion ? `v${hh.daemonVersion}` : "old version";
-      cardHost.replaceChildren(
-        h("div", { class: "gate__card" },
-          h("span", { class: "gate__badge gate__badge--danger" }, `Update needed · ${currentVer}`),
+      panelHost.replaceChildren(
+        h("div", { class: "gate__panel" },
+          statusRow("danger", `Update required · running ${currentVer}`),
           h("h1", { id: "gate-h", class: "t-headline" }, "Update your Windows app"),
           h("p", { class: "t-body", style: { color: "var(--on-surface-variant)" } },
-            "Your running daemon version doesn't match this web controller. Download the latest executable and run it."
+            "Your running daemon version doesn't match this controller. Download the latest executable and run it."
           ),
           h("a", {
             class: "btn btn--primary",
             href: DOWNLOAD_URL,
             target: "_blank",
             rel: "noopener",
-            style: { width: "100%", height: "42px" },
+            style: { width: "100%", height: "40px" },
           }, "Download latest for Windows (.exe)"),
           h("div", { class: "gate__footer" },
             h("span", { class: "t-caption" }, "Replace the running exe and check again."),
@@ -225,12 +243,12 @@ const screen = {
         type: "text",
         maxlength: "6",
         value: pendingCode,
-        placeholder: "••••••",
+        placeholder: "------",
         inputmode: "text",
         autocomplete: "one-time-code",
         spellcheck: "false",
         "aria-describedby": "code-help",
-        oninput: (e) => {
+        onInput: (e) => {
           const cleaned = sanitize(e.target.value);
           if (e.target.value !== cleaned) e.target.value = cleaned;
           input.removeAttribute("aria-invalid");
@@ -239,7 +257,7 @@ const screen = {
         },
       });
 
-      const form = h("form", { novalidate: true, onsubmit: submitPair, style: { display: "flex", flexDirection: "column", gap: "var(--space-3)" } },
+      const form = h("form", { novalidate: true, onSubmit: submitPair, style: { display: "flex", flexDirection: "column", gap: "var(--space-3)" } },
         field({
           id: "code",
           label: "6-character pairing code",
@@ -309,10 +327,10 @@ const screen = {
         }
       }
 
-      cardHost.replaceChildren(
+      panelHost.replaceChildren(
         rescue || "",
-        h("div", { class: "gate__card" },
-          h("span", { class: "gate__badge gate__badge--ok" }, `Windows app connected on port ${getPort()}`),
+        h("div", { class: "gate__panel" },
+          statusRow("ok", `Connected · 127.0.0.1:${getPort()}`),
           h("h1", { id: "gate-h", class: "t-headline" }, "Pair this browser"),
           h("p", { class: "t-body", style: { color: "var(--on-surface-variant)" } },
             "Enter the 6-character code from your Mentions tray menu to unlock commands and settings."
@@ -335,16 +353,6 @@ const screen = {
         input.focus();
         if (pendingCode.length === 6) submitPair();
       }, 0);
-    }
-
-    function step(num, title, desc) {
-      return h("div", { class: "gate__step" },
-        h("span", { class: "gate__step-num", "aria-hidden": "true" }, String(num)),
-        h("div", { style: { display: "flex", flexDirection: "column", gap: "2px" } },
-          h("span", { class: "t-label", style: { fontWeight: "600", color: "var(--on-surface)" } }, title),
-          h("span", { class: "t-caption" }, desc)
-        )
-      );
     }
 
     function applyHealth(hh) {

@@ -52,7 +52,7 @@ const screen = {
         const result = await request("/api/settings", { method: "PATCH", body: patch });
         if (result) set("settings", result);
         savedAt[sectionId] = new Date().toISOString();
-        if (statusEl) statusEl.textContent = "✓ Saved";
+        if (statusEl) statusEl.textContent = "Saved";
         announce("Settings saved.");
         return result;
       } catch (err) {

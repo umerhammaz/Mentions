@@ -247,7 +247,6 @@
     padding: var(--space-3) var(--space-4);
     background: var(--surface-container-high); color: var(--on-surface);
     border: var(--border-structure);
-    border-left: 3px solid var(--accent);
     border-radius: var(--radius-control);
     box-shadow: var(--surface-elev-2);
     font-size: var(--fs-label);

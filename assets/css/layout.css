@@ -88,19 +88,9 @@
     color: var(--on-surface);
   }
   .rail__link[aria-current="page"] {
-    background: color-mix(in oklab, var(--accent) 14%, transparent);
+    background: var(--surface-container-high);
     color: var(--on-surface);
     font-weight: 600;
-  }
-  .rail__link[aria-current="page"]::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    top: 6px;
-    bottom: 6px;
-    width: 3px;
-    border-radius: 0 3px 3px 0;
-    background: var(--accent);
   }
 
   .rail__footer {
@@ -180,7 +170,6 @@
   body.is-locked .workspace {
     margin-left: 0;
     justify-content: center;
-    background: radial-gradient(circle at 50% 0%, color-mix(in oklab, var(--accent) 10%, transparent), transparent 55%);
   }
   body.is-locked .banners {
     display: none;
@@ -246,9 +235,6 @@
       gap: 2px;
       font-size: var(--fs-caption);
       padding: var(--space-1) var(--space-2);
-    }
-    .rail__link[aria-current="page"]::before {
-      display: none;
     }
     .rail__footer {
       padding-top: 0;

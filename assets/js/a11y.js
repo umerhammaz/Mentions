@@ -48,9 +48,26 @@ export function roving(container, itemSelector) {
   return () => container.removeEventListener("keydown", onKey);
 }
 
+function parseTimestamp(val) {
+  if (val == null || val === "") return null;
+  if (typeof val === "number") {
+    const d = new Date(val < 1e12 ? val * 1000 : val);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const s = String(val).trim();
+  const unixMatch = s.match(/^(\d{9,13})Z?$/i);
+  if (unixMatch) {
+    const num = Number(unixMatch[1]);
+    const d = new Date(num < 1e12 ? num * 1000 : num);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 export function formatDate(iso) {
-  if (!iso) return "";
-  const d = new Date(iso);
+  const d = parseTimestamp(iso);
+  if (!d) return "";
   const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
   const diff = (d.getTime() - Date.now()) / 1000;
   if (Math.abs(diff) < 60) return rtf.format(Math.round(diff), "second");
