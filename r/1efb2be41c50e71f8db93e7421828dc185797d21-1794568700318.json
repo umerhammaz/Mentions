@@ -1,0 +1,175 @@
+{
+  "v": 2,
+  "id": "zc_mwevvbeu_h8ww",
+  "sid": "s_mweuy6bv_4e38",
+  "repo": "umerhammaz/mentions",
+  "ts": 1794568700318,
+  "sha": "1efb2be41c50e71f8db93e7421828dc185797d21",
+  "branch": "main",
+  "delivery": "direct",
+  "msgSubj": "feat(sync): Synchronized 19 file(s) across 3 prompt turn(s)",
+  "msgHash": "92cf7b0b852ec145",
+  "files": [
+    [
+      ".github/workflows/release.yml",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "Cargo.toml",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "src/store.rs",
+      "m",
+      "ai",
+      2,
+      0
+    ],
+    [
+      "src/injector.rs",
+      "m",
+      "ai",
+      2,
+      0
+    ],
+    [
+      "src/updater.rs",
+      "a",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "src/main.rs",
+      "m",
+      "ai",
+      2,
+      0
+    ],
+    [
+      "src/tray.rs",
+      "m",
+      "ai",
+      3,
+      0
+    ],
+    [
+      "src/server.rs",
+      "m",
+      "ai",
+      3,
+      0
+    ],
+    [
+      "assets/css/reset.css",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/css/base.css",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/css/components.css",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/css/layout.css",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/css/screens.css",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/js/api.js",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/js/ws.js",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/js/main.js",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/js/screens/commands.js",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/js/screens/editor.js",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/js/screens/settings.js",
+      "m",
+      "ai",
+      1,
+      0
+    ]
+  ],
+  "sum": {
+    "files": 19,
+    "add": 1,
+    "mod": 18,
+    "del": 0,
+    "src": {
+      "ai": 19
+    }
+  },
+  "warn": {
+    "quarantine": 0,
+    "halluc": 0,
+    "secret": 0,
+    "runtime": 0,
+    "override": false
+  },
+  "safety": {
+    "canary": "8/8",
+    "vault": "persistent"
+  },
+  "base": {
+    "gen": 0,
+    "anc": "T",
+    "race": 0
+  },
+  "verify": 1,
+  "ms": 13610,
+  "hash": "b810feebad2bc5ef"
+}
