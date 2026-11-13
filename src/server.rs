@@ -1,5 +1,3 @@
-
-```rust
 use crate::store::{self, AppState, ArcCommandSlice, CommandItem, CommandSummary};
 use serde_json::{json, Value};
 use std::io::Read;

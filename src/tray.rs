@@ -1,5 +1,3 @@
-
-```rust
 use crate::server::WsHub;
 use crate::store::AppState;
 use serde_json::json;
