@@ -1,8 +1,12 @@
+use serde::ser::SerializeSeq;
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
+use std::thread;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CommandItem {
@@ -16,6 +20,85 @@ pub struct CommandItem {
     pub created_at: String,
     #[serde(rename = "updatedAt")]
     pub updated_at: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct CommandSummary {
+    pub id: String,
+    pub trigger: String,
+    pub enabled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+    pub preview: String,
+    pub lines: usize,
+    pub words: usize,
+    pub chars: usize,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+    #[serde(rename = "updatedAt")]
+    pub updated_at: String,
+}
+
+pub fn compact_preview(s: &str, max_chars: usize) -> String {
+    let mut out = String::with_capacity(max_chars + 4);
+    let mut prev_space = false;
+    let mut count = 0usize;
+    for ch in s.chars() {
+        if count >= max_chars {
+            out.push_str("...");
+            break;
+        }
+        if ch == '\r' || ch == '\n' || ch == '\t' || ch == ' ' {
+            if !prev_space && !out.is_empty() {
+                out.push(' ');
+                count += 1;
+            }
+            prev_space = true;
+        } else {
+            out.push(ch);
+            count += 1;
+            prev_space = false;
+        }
+    }
+    out
+}
+
+pub fn summarize_command(c: &CommandItem) -> CommandSummary {
+    let lines = if c.text.is_empty() {
+        0
+    } else {
+        c.text.split('\n').count()
+    };
+    let words = c.text.split_whitespace().count();
+    CommandSummary {
+        id: c.id.clone(),
+        trigger: c.trigger.clone(),
+        enabled: c.enabled,
+        group: c.group.clone(),
+        preview: compact_preview(&c.text, 72),
+        lines,
+        words,
+        chars: c.text.chars().count(),
+        created_at: c.created_at.clone(),
+        updated_at: c.updated_at.clone(),
+    }
+}
+
+pub struct ArcCommandSlice<'a>(pub &'a [Arc<CommandItem>]);
+
+impl Serialize for ArcCommandSlice<'_> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut seq = serializer.serialize_seq(Some(self.0.len()))?;
+        for item in self.0 {
+            seq.serialize_element(item.as_ref())?;
+        }
+        seq.end()
+    }
+}
+
+#[derive(Serialize)]
+struct CommandsFileRef<'a> {
+    commands: ArcCommandSlice<'a>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -70,8 +153,88 @@ struct CommandsFile {
     commands: Vec<CommandItem>,
 }
 
+struct SaveQueue {
+    queued_rev: u64,
+    saved_rev: u64,
+    flush_now: bool,
+    path: PathBuf,
+    items: Vec<Arc<CommandItem>>,
+}
+
+static SAVE_WORKER: OnceLock<Arc<(Mutex<SaveQueue>, Condvar)>> = OnceLock::new();
+
+fn ensure_save_worker(path: &PathBuf) -> &'static Arc<(Mutex<SaveQueue>, Condvar)> {
+    SAVE_WORKER.get_or_init(|| {
+        let pair = Arc::new((
+            Mutex::new(SaveQueue {
+                queued_rev: 0,
+                saved_rev: 0,
+                flush_now: false,
+                path: path.clone(),
+                items: Vec::new(),
+            }),
+            Condvar::new(),
+        ));
+        let worker_pair = Arc::clone(&pair);
+        thread::spawn(move || {
+            let (lock, cvar) = &*worker_pair;
+            loop {
+                let (rev, target_path, snapshot) = {
+                    let mut q = lock.lock().unwrap();
+                    while q.queued_rev <= q.saved_rev {
+                        q.flush_now = false;
+                        cvar.notify_all();
+                        q = cvar.wait(q).unwrap();
+                    }
+                    if !q.flush_now {
+                        let (guard, _) = cvar.wait_timeout(q, Duration::from_millis(150)).unwrap();
+                        q = guard;
+                    }
+                    q.flush_now = false;
+                    (q.queued_rev, q.path.clone(), q.items.clone())
+                };
+
+                let wrapper = CommandsFileRef {
+                    commands: ArcCommandSlice(&snapshot),
+                };
+                atomic_write_compact_json(&target_path, &wrapper);
+
+                let mut q = lock.lock().unwrap();
+                if rev > q.saved_rev {
+                    q.saved_rev = rev;
+                }
+                cvar.notify_all();
+            }
+        });
+        pair
+    })
+}
+
+pub fn flush_pending_saves() {
+    let Some(pair) = SAVE_WORKER.get() else {
+        return;
+    };
+    let (lock, cvar) = &**pair;
+    let mut q = lock.lock().unwrap();
+    if q.queued_rev <= q.saved_rev {
+        return;
+    }
+    q.flush_now = true;
+    cvar.notify_all();
+    while q.queued_rev > q.saved_rev {
+        let (guard, timeout) = cvar.wait_timeout(q, Duration::from_secs(3)).unwrap();
+        q = guard;
+        if timeout.timed_out() {
+            break;
+        }
+    }
+}
+
 pub struct AppState {
-    pub commands: Vec<CommandItem>,
+    pub commands: Vec<Arc<CommandItem>>,
+    pub trigger_index: HashMap<String, usize>,
+    pub id_index: HashMap<String, usize>,
+    pub commands_rev: u64,
     pub settings: Settings,
     pub tokens: Vec<String>,
     pub pair_code: String,
@@ -90,19 +253,25 @@ impl AppState {
         let settings_path = data_dir.join("settings.json");
         let tokens_path = data_dir.join("tokens.json");
 
-        let commands = load_with_backup::<CommandsFile>(&commands_path)
+        let raw_commands = load_with_backup::<CommandsFile>(&commands_path)
             .map(|f| f.commands)
             .or_else(|| load_with_backup::<Vec<CommandItem>>(&commands_path))
             .unwrap_or_else(default_commands);
 
+        let commands: Vec<Arc<CommandItem>> = raw_commands.into_iter().map(Arc::new).collect();
         let settings = load_with_backup::<Settings>(&settings_path).unwrap_or_default();
         let tokens = load_with_backup::<TokenFile>(&tokens_path)
             .map(|t| t.tokens)
             .unwrap_or_default();
 
+        let _ = ensure_save_worker(&commands_path);
+
         let (code, exp) = generate_pair_code();
-        let state = Self {
+        let mut state = Self {
             commands,
+            trigger_index: HashMap::new(),
+            id_index: HashMap::new(),
+            commands_rev: 0,
             settings,
             tokens,
             pair_code: code,
@@ -111,10 +280,78 @@ impl AppState {
             pair_lock_until: 0,
             data_dir,
         };
-        state.save_commands();
+        state.rebuild_indexes();
+        if !commands_path.exists() {
+            let wrapper = CommandsFileRef {
+                commands: ArcCommandSlice(&state.commands),
+            };
+            atomic_write_compact_json(&commands_path, &wrapper);
+        }
         state.save_settings();
         state.save_tokens();
         state
+    }
+
+    pub fn rebuild_indexes(&mut self) {
+        self.trigger_index.clear();
+        self.id_index.clear();
+        self.trigger_index.reserve(self.commands.len());
+        self.id_index.reserve(self.commands.len());
+        for (i, c) in self.commands.iter().enumerate() {
+            self.trigger_index.insert(c.trigger.to_ascii_lowercase(), i);
+            self.id_index.insert(c.id.clone(), i);
+        }
+    }
+
+    pub fn has_trigger(&self, trigger: &str) -> bool {
+        self.trigger_index
+            .contains_key(&trigger.to_ascii_lowercase())
+    }
+
+    pub fn get_index_by_id(&self, id: &str) -> Option<usize> {
+        self.id_index.get(id).copied()
+    }
+
+    pub fn get_command_by_id(&self, id: &str) -> Option<&Arc<CommandItem>> {
+        self.id_index.get(id).and_then(|&i| self.commands.get(i))
+    }
+
+    pub fn get_enabled_text_by_id(&self, id: &str) -> Option<String> {
+        self.get_command_by_id(id)
+            .filter(|c| c.enabled)
+            .map(|c| c.text.clone())
+    }
+
+    pub fn insert_command(&mut self, item: CommandItem) -> Arc<CommandItem> {
+        let arc = Arc::new(item);
+        let idx = self.commands.len();
+        self.trigger_index
+            .insert(arc.trigger.to_ascii_lowercase(), idx);
+        self.id_index.insert(arc.id.clone(), idx);
+        self.commands.push(Arc::clone(&arc));
+        arc
+    }
+
+    pub fn replace_command_at(&mut self, idx: usize, next: CommandItem) -> Arc<CommandItem> {
+        let old_trig = self.commands[idx].trigger.to_ascii_lowercase();
+        let new_trig = next.trigger.to_ascii_lowercase();
+        if old_trig != new_trig {
+            self.trigger_index.remove(&old_trig);
+            self.trigger_index.insert(new_trig, idx);
+        }
+        let arc = Arc::new(next);
+        self.commands[idx] = Arc::clone(&arc);
+        arc
+    }
+
+    pub fn remove_command_at(&mut self, idx: usize) {
+        self.commands.remove(idx);
+        self.rebuild_indexes();
+    }
+
+    pub fn replace_all_commands(&mut self, items: Vec<CommandItem>) {
+        self.commands = items.into_iter().map(Arc::new).collect();
+        self.rebuild_indexes();
     }
 
     pub fn get_or_create_pair_code(&mut self) -> String {
@@ -175,11 +412,16 @@ impl AppState {
         !tok.is_empty() && self.tokens.iter().any(|x| x == tok)
     }
 
-    pub fn save_commands(&self) {
-        let wrapper = CommandsFile {
-            commands: self.commands.clone(),
-        };
-        atomic_write_json(&self.data_dir.join("commands.json"), &wrapper);
+    pub fn save_commands(&mut self) {
+        self.commands_rev += 1;
+        let path = self.data_dir.join("commands.json");
+        let pair = ensure_save_worker(&path);
+        let (lock, cvar) = &**pair;
+        let mut q = lock.lock().unwrap();
+        q.queued_rev = self.commands_rev;
+        q.path = path;
+        q.items = self.commands.clone();
+        cvar.notify_all();
     }
 
     pub fn save_settings(&self) {
@@ -192,6 +434,18 @@ impl AppState {
         };
         atomic_write_json(&self.data_dir.join("tokens.json"), &wrapper);
     }
+}
+
+pub fn dedupe_commands(items: Vec<CommandItem>) -> Vec<CommandItem> {
+    let mut seen = HashSet::with_capacity(items.len());
+    let mut out = Vec::with_capacity(items.len());
+    for item in items {
+        let key = item.trigger.to_ascii_lowercase();
+        if seen.insert(key) {
+            out.push(item);
+        }
+    }
+    out
 }
 
 fn resolve_data_dir() -> PathBuf {
@@ -226,10 +480,21 @@ fn atomic_write_json<T: Serialize>(path: &PathBuf, data: &T) {
     let Ok(serialized) = serde_json::to_vec_pretty(data) else {
         return;
     };
+    write_atomic_bytes(path, &serialized);
+}
+
+fn atomic_write_compact_json<T: Serialize>(path: &PathBuf, data: &T) {
+    let Ok(serialized) = serde_json::to_vec(data) else {
+        return;
+    };
+    write_atomic_bytes(path, &serialized);
+}
+
+fn write_atomic_bytes(path: &PathBuf, serialized: &[u8]) {
     let tmp = path.with_extension("json.tmp");
     let bak = path.with_extension("json.bak");
     if let Ok(mut file) = fs::File::create(&tmp) {
-        if file.write_all(&serialized).is_ok() && file.sync_all().is_ok() {
+        if file.write_all(serialized).is_ok() && file.sync_all().is_ok() {
             drop(file);
             if path.exists() {
                 let _ = fs::copy(path, &bak);

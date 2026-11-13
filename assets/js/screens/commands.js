@@ -1,32 +1,45 @@
 import { h } from "../dom.js";
-import { state, set, on as onState, emit } from "../store.js";
+import { state, set, on as onState, emit, commandBodyCache } from "../store.js";
 import { route, navigate } from "../router.js";
 import { request } from "../api.js";
 import { overflowMenu, confirmDialog, toast, truncate, formatNum, formatDate } from "../ui.js";
 import { announce } from "../a11y.js";
 import { renderEditor } from "./editor.js";
 
+const ROW_H = 60;
 const rowMetaCache = new WeakMap();
 
 function getCommandMeta(c) {
   let meta = rowMetaCache.get(c);
   if (!meta) {
-    const text = c.text || "";
-    const lines = text ? text.split(/\r\n|\r|\n/).length : 0;
-    const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+    const hasFull = typeof c.text === "string";
+    const text = hasFull ? c.text : (c.preview || "");
+    const lines = typeof c.lines === "number" ? c.lines : (text ? text.split(/\r\n|\r|\n/).length : 0);
+    const words = typeof c.words === "number" ? c.words : (text.trim() ? text.trim().split(/\s+/).length : 0);
+    const chars = typeof c.chars === "number" ? c.chars : text.length;
     meta = {
       triggerLower: (c.trigger || "").toLowerCase(),
       groupLower: (c.group || "").toLowerCase(),
-      preview: truncate(text, 72),
+      preview: hasFull ? truncate(text, 72) : (c.preview || ""),
       lines,
       words,
-      chars: text.length,
-      charsLabel: `${formatNum(lines)}L · ${formatNum(text.length)}c`,
-      textSampleLower: text.slice(0, 4096).toLowerCase(),
+      chars,
+      charsLabel: `${formatNum(lines)}L · ${formatNum(chars)}c`,
+      previewLower: (hasFull ? text.slice(0, 4096) : (c.preview || "")).toLowerCase(),
     };
     rowMetaCache.set(c, meta);
   }
   return meta;
+}
+
+async function loadCommandBody(c) {
+  if (!c) return "";
+  if (typeof c.text === "string") return c.text;
+  if (commandBodyCache.has(c.id)) return commandBodyCache.get(c.id);
+  const full = await request(`/api/commands/${encodeURIComponent(c.id)}`);
+  const text = full?.text || "";
+  commandBodyCache.set(c.id, text);
+  return text;
 }
 
 function nextUniqueTrigger(baseTrigger, commands) {
@@ -47,6 +60,24 @@ function terminatorLabel(term) {
   return "Space";
 }
 
+function toSummary(c) {
+  if (typeof c.text !== "string") return c;
+  const lines = c.text ? c.text.split("\n").length : 0;
+  const words = c.text.trim() ? c.text.trim().split(/\s+/).length : 0;
+  return {
+    id: c.id,
+    trigger: c.trigger,
+    enabled: c.enabled,
+    ...(c.group ? { group: c.group } : {}),
+    preview: truncate(c.text, 72),
+    lines,
+    words,
+    chars: c.text.length,
+    createdAt: c.createdAt,
+    updatedAt: c.updatedAt,
+  };
+}
+
 const routeScreen = {
   title: "Commands",
   async mount({ root }) {
@@ -56,6 +87,18 @@ const routeScreen = {
     let showSandbox = false;
     let showWhitespace = false;
     let filterTimer = null;
+    let deepSearchTimer = null;
+    let deepMatchQuery = "";
+    let deepMatchIds = new Set();
+
+    let currentFiltered = [];
+    let renderVersion = 0;
+    let lastSliceKey = "";
+    let listScrollEl = null;
+    let spacerEl = null;
+    let viewportEl = null;
+    let inspectorEl = null;
+    let inspectorSeq = 0;
 
     const container = h("section", { class: "cmds", "aria-labelledby": "cmds-h" });
     const headSlot = h("div");
@@ -75,7 +118,8 @@ const routeScreen = {
           const text = await file.text();
           const bundle = JSON.parse(text);
           await request("/api/commands/import", { method: "POST", body: bundle });
-          const data = await request("/api/commands");
+          const data = await request("/api/commands?view=summary");
+          commandBodyCache.clear();
           if (Array.isArray(data?.commands)) set("commands", data.commands);
           rerender();
           toast({ message: "Commands imported." });
@@ -94,9 +138,10 @@ const routeScreen = {
     let tabsHostEl = null;
     let sandboxArea = null;
 
-    function getFilteredCommands() {
+    function computeFiltered() {
       const filter = (state.ui.filter || "").toLowerCase().trim();
       const desc = state.ui.sort === "-trigger";
+      const useDeep = filter.length >= 2 && deepMatchQuery === filter;
       return state.commands.filter((c) => {
         if (activeTab === "__enabled" && !c.enabled) return false;
         if (activeTab === "__paused" && c.enabled) return false;
@@ -104,13 +149,33 @@ const routeScreen = {
           if ((c.group || "").toLowerCase() !== activeTab.toLowerCase()) return false;
         }
         if (!filter) return true;
+        if (useDeep && deepMatchIds.has(c.id)) return true;
         const meta = getCommandMeta(c);
         return (
           meta.triggerLower.includes(filter) ||
           meta.groupLower.includes(filter) ||
-          meta.textSampleLower.includes(filter)
+          meta.previewLower.includes(filter)
         );
       }).sort((a, b) => desc ? b.trigger.localeCompare(a.trigger) : a.trigger.localeCompare(b.trigger));
+    }
+
+    function scheduleDeepSearch(rawFilter) {
+      clearTimeout(deepSearchTimer);
+      const q = rawFilter.toLowerCase().trim();
+      if (q.length < 2) {
+        deepMatchQuery = "";
+        deepMatchIds.clear();
+        return;
+      }
+      deepSearchTimer = setTimeout(async () => {
+        try {
+          const res = await request(`/api/commands/search?q=${encodeURIComponent(q)}`);
+          if ((state.ui.filter || "").toLowerCase().trim() !== q) return;
+          deepMatchQuery = q;
+          deepMatchIds = new Set(Array.isArray(res?.ids) ? res.ids : []);
+          renderBodyOnly(true);
+        } catch {}
+      }, 150);
     }
 
     function renderHead() {
@@ -162,7 +227,7 @@ const routeScreen = {
         id: "sandbox-input",
         class: "textarea cmds__sandbox-input",
         placeholder: `Type any @trigger followed by ${termKey} here...`,
-        onKeydown: (e) => {
+        onKeydown: async (e) => {
           const isMatchKey =
             (term === "enter" && e.key === "Enter" && !e.shiftKey) ||
             (term === "tab" && e.key === "Tab") ||
@@ -176,9 +241,12 @@ const routeScreen = {
           if (!hit) return;
           e.preventDefault();
           const start = pos - m[1].length;
-          const after = sandboxArea.value.slice(sandboxArea.selectionEnd ?? pos);
-          sandboxArea.value = sandboxArea.value.slice(0, start) + hit.text + after;
-          const nextPos = start + hit.text.length;
+          const endPos = sandboxArea.selectionEnd ?? pos;
+          let expanded = "";
+          try { expanded = await loadCommandBody(hit); } catch { return; }
+          const curVal = sandboxArea.value;
+          sandboxArea.value = curVal.slice(0, start) + expanded + curVal.slice(endPos);
+          const nextPos = start + expanded.length;
           sandboxArea.setSelectionRange(nextPos, nextPos);
           announce(`Expanded ${hit.trigger}`);
         },
@@ -216,10 +284,12 @@ const routeScreen = {
           value: state.ui.filter || "",
           "aria-label": "Filter commands",
           onInput: (e) => {
-            set("ui", { ...state.ui, filter: e.target.value });
+            const val = e.target.value;
+            set("ui", { ...state.ui, filter: val });
             updateSearchDecor();
             clearTimeout(filterTimer);
-            filterTimer = setTimeout(renderBodyOnly, 30);
+            filterTimer = setTimeout(() => renderBodyOnly(true), 30);
+            scheduleDeepSearch(val);
           },
         });
         clearBtnEl = h("button", {
@@ -231,8 +301,10 @@ const routeScreen = {
           onClick: () => {
             searchInputEl.value = "";
             set("ui", { ...state.ui, filter: "" });
+            deepMatchQuery = "";
+            deepMatchIds.clear();
             updateSearchDecor();
-            renderBodyOnly();
+            renderBodyOnly(true);
             searchInputEl.focus();
           },
         }, "×");
@@ -244,7 +316,7 @@ const routeScreen = {
             const nextDesc = state.ui.sort !== "-trigger";
             set("ui", { ...state.ui, sort: nextDesc ? "-trigger" : "trigger" });
             sortBtn.textContent = nextDesc ? "Trigger ↓" : "Trigger ↑";
-            renderBodyOnly();
+            renderBodyOnly(true);
           },
         }, desc ? "Trigger ↓" : "Trigger ↑");
         tabsHostEl = h("div", { class: "cmds__tabs" });
@@ -277,29 +349,53 @@ const routeScreen = {
         const g = (c.group || "").trim();
         if (g && !groups.has(g.toLowerCase())) groups.set(g.toLowerCase(), g);
       }
+      const sortedGroups = Array.from(groups.values()).sort((a, b) => a.localeCompare(b));
       if (activeTab !== "all" && activeTab !== "__enabled" && activeTab !== "__paused" && !groups.has(activeTab.toLowerCase())) {
         activeTab = "all";
       }
+      const inlineGroups = sortedGroups.slice(0, 6);
+      const overflowGroups = sortedGroups.slice(6);
+
       const tabs = [
-        { id: "all", label: `All (${state.commands.length})` },
-        { id: "__enabled", label: `Active (${enabledCount})` },
-        ...(pausedCount > 0 ? [{ id: "__paused", label: `Paused (${pausedCount})` }] : []),
-        ...Array.from(groups.values()).sort((a, b) => a.localeCompare(b)).map((g) => ({ id: g, label: g })),
+        { id: "all", label: `All (${formatNum(state.commands.length)})` },
+        { id: "__enabled", label: `Active (${formatNum(enabledCount)})` },
+        ...(pausedCount > 0 ? [{ id: "__paused", label: `Paused (${formatNum(pausedCount)})` }] : []),
+        ...inlineGroups.map((g) => ({ id: g, label: g })),
       ];
-      tabsHostEl.replaceChildren(
-        ...tabs.map((t) =>
-          h("button", {
-            type: "button",
-            class: "tab-btn",
-            "aria-pressed": activeTab.toLowerCase() === t.id.toLowerCase() ? "true" : "false",
-            onClick: () => {
-              activeTab = t.id;
-              renderTabs();
-              renderBodyOnly();
-            },
-          }, t.label)
-        )
+
+      const nodes = tabs.map((t) =>
+        h("button", {
+          type: "button",
+          class: "tab-btn",
+          "aria-pressed": activeTab.toLowerCase() === t.id.toLowerCase() ? "true" : "false",
+          onClick: () => {
+            activeTab = t.id;
+            renderTabs();
+            renderBodyOnly(true);
+          },
+        }, t.label)
       );
+
+      if (overflowGroups.length > 0) {
+        const overflowSelected = overflowGroups.some((g) => g.toLowerCase() === activeTab.toLowerCase());
+        const select = h("select", {
+          class: "tab-select",
+          "aria-label": "More groups",
+          onchange: (e) => {
+            activeTab = e.target.value || "all";
+            renderTabs();
+            renderBodyOnly(true);
+          },
+        },
+          h("option", { value: "", selected: !overflowSelected }, `More groups (${overflowGroups.length})`),
+          ...overflowGroups.map((g) =>
+            h("option", { value: g, selected: g.toLowerCase() === activeTab.toLowerCase() }, g)
+          )
+        );
+        nodes.push(select);
+      }
+
+      tabsHostEl.replaceChildren(...nodes);
     }
 
     async function toggleCommandEnabled(c) {
@@ -309,7 +405,8 @@ const routeScreen = {
           method: "PATCH",
           body: { enabled: nextEnabled },
         });
-        set("commands", state.commands.map((item) => item.id === c.id ? (updated || { ...item, enabled: nextEnabled }) : item));
+        const nextSummary = updated ? toSummary(updated) : { ...c, enabled: nextEnabled };
+        set("commands", state.commands.map((item) => item.id === c.id ? nextSummary : item));
         rerender();
         toast({ message: `${c.trigger} ${nextEnabled ? "enabled" : "paused"}` });
         announce(`${c.trigger} ${nextEnabled ? "enabled" : "paused"}`);
@@ -320,18 +417,19 @@ const routeScreen = {
 
     async function duplicateCommand(c) {
       try {
+        const fullText = await loadCommandBody(c);
         const copy = {
           trigger: nextUniqueTrigger(c.trigger, state.commands),
-          text: c.text,
+          text: fullText,
           enabled: c.enabled,
           ...(c.group ? { group: c.group } : {}),
         };
         const created = await request("/api/commands", { method: "POST", body: copy });
         if (created && !state.commands.some((x) => x.id === created.id)) {
-          set("commands", [...state.commands, created]);
+          commandBodyCache.set(created.id, created.text || fullText);
+          set("commands", [...state.commands, toSummary(created)]);
           set("ui", { ...state.ui, selectedId: created.id });
         }
-        emit("commands:reload");
         rerender();
         toast({ message: `Duplicated as ${copy.trigger}` });
       } catch {
@@ -347,8 +445,10 @@ const routeScreen = {
         danger: true,
         onConfirm: async () => {
           try {
+            const fullText = await loadCommandBody(c);
             await request(`/api/commands/${encodeURIComponent(c.id)}`, { method: "DELETE" });
-            const snapshot = c;
+            commandBodyCache.delete(c.id);
+            const snapshot = { ...c, text: fullText };
             set("commands", state.commands.filter((x) => x.id !== c.id));
             rerender();
             toast({
@@ -366,9 +466,9 @@ const routeScreen = {
                     },
                   });
                   if (restored && !state.commands.some((x) => x.id === restored.id)) {
-                    set("commands", [...state.commands, restored]);
+                    commandBodyCache.set(restored.id, snapshot.text);
+                    set("commands", [...state.commands, toSummary(restored)]);
                   }
-                  emit("commands:reload");
                   emit("commands:changed");
                 } catch {}
               },
@@ -387,7 +487,8 @@ const routeScreen = {
           label: "Copy text",
           onSelect: async () => {
             try {
-              await navigator.clipboard.writeText(c.text);
+              const txt = await loadCommandBody(c);
+              await navigator.clipboard.writeText(txt);
               toast({ message: `Copied ${c.trigger}` });
             } catch {
               toast({ message: "Couldn't copy text." });
@@ -399,6 +500,18 @@ const routeScreen = {
         { label: "Duplicate", onSelect: () => duplicateCommand(c) },
         { label: "Delete", danger: true, onSelect: () => confirmDelete(c) },
       ];
+    }
+
+    function selectInPlace(nextCmd) {
+      const prevId = state.ui.selectedId;
+      set("ui", { ...state.ui, selectedId: nextCmd.id });
+      if (viewportEl) {
+        for (const el of viewportEl.children) {
+          if (el.dataset.key === prevId) el.setAttribute("aria-selected", "false");
+          if (el.dataset.key === nextCmd.id) el.setAttribute("aria-selected", "true");
+        }
+      }
+      updateInspector(nextCmd);
     }
 
     function buildRow(c, selectedId) {
@@ -413,8 +526,7 @@ const routeScreen = {
         onClick: (e) => {
           if (e.target.closest("button, a, label, input, .menu")) return;
           if (isDesktop) {
-            set("ui", { ...state.ui, selectedId: c.id });
-            renderBodyOnly();
+            selectInPlace(c);
           } else {
             navigate(editHref);
           }
@@ -452,17 +564,27 @@ const routeScreen = {
       );
     }
 
-    function buildInspector(c) {
-      if (!c) return null;
-      const meta = getCommandMeta(c);
-      const termKey = terminatorLabel(state.settings?.terminator || "space");
-      const rawText = c.text || "";
-      const displayText = showWhitespace
+    function formatPreviewText(rawText) {
+      return showWhitespace
         ? rawText.replace(/ /g, "·").replace(/\t/g, "→   ").replace(/\n/g, "¶\n")
         : rawText;
-      const updatedLabel = formatDate(c.updatedAt);
+    }
 
-      return h("aside", { class: "cmds__inspector", "aria-label": "Selected command" },
+    function updateInspector(c) {
+      if (!inspectorEl || !c) return;
+      const seq = ++inspectorSeq;
+      const meta = getCommandMeta(c);
+      const termKey = terminatorLabel(state.settings?.terminator || "space");
+      const updatedLabel = formatDate(c.updatedAt);
+      const cachedText = typeof c.text === "string"
+        ? c.text
+        : (commandBodyCache.has(c.id) ? commandBodyCache.get(c.id) : null);
+
+      const preEl = h("pre", { class: "inspector__preview" },
+        cachedText !== null ? (formatPreviewText(cachedText) || "(empty)") : "Loading..."
+      );
+
+      inspectorEl.replaceChildren(
         h("div", { class: "inspector__head" },
           h("div", { class: "inspector__title-row" },
             h("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" } },
@@ -483,7 +605,8 @@ const routeScreen = {
             type: "button",
             onClick: async () => {
               try {
-                await navigator.clipboard.writeText(c.text);
+                const txt = await loadCommandBody(c);
+                await navigator.clipboard.writeText(txt);
                 toast({ message: `Copied ${c.trigger}` });
               } catch {
                 toast({ message: "Couldn't copy text." });
@@ -505,20 +628,80 @@ const routeScreen = {
             type: "button",
             onClick: () => {
               showWhitespace = !showWhitespace;
-              renderBodyOnly();
+              updateInspector(c);
             },
           }, showWhitespace ? "Hide marks" : "Show marks")
         ),
-        h("pre", { class: "inspector__preview" }, displayText || "(empty)"),
+        preEl,
         h("div", { class: "meta", style: { justifyContent: "space-between", flexWrap: "wrap" } },
           h("span", null, `${formatNum(meta.lines)} lines · ${formatNum(meta.words)} words · ${formatNum(meta.chars)} chars`),
           updatedLabel ? h("span", null, `Updated ${updatedLabel}`) : null
         )
       );
+
+      if (cachedText === null) {
+        loadCommandBody(c).then((fullText) => {
+          if (seq !== inspectorSeq || !preEl.isConnected) return;
+          preEl.textContent = formatPreviewText(fullText) || "(empty)";
+        }).catch(() => {
+          if (seq === inspectorSeq && preEl.isConnected) {
+            preEl.textContent = c.preview || "";
+          }
+        });
+      }
     }
 
-    function renderBodyOnly() {
+    let scrollFrame = 0;
+
+    function renderWindow(force = false) {
+      if (!listScrollEl || !viewportEl || !spacerEl) return;
+      const total = currentFiltered.length;
+      spacerEl.style.height = `${total * ROW_H}px`;
+      const viewH = listScrollEl.clientHeight || 540;
+      const scrollTop = listScrollEl.scrollTop || 0;
+      const start = Math.max(0, Math.floor(scrollTop / ROW_H) - 4);
+      const count = Math.ceil(viewH / ROW_H) + 8;
+      const end = Math.min(total, start + count);
+      const sig = `${start}:${end}:${renderVersion}:${isDesktop}`;
+      if (!force && sig === lastSliceKey) return;
+      lastSliceKey = sig;
+      viewportEl.style.transform = `translateY(${start * ROW_H}px)`;
+      const nodes = [];
+      for (let i = start; i < end; i++) {
+        nodes.push(buildRow(currentFiltered[i], state.ui.selectedId));
+      }
+      viewportEl.replaceChildren(...nodes);
+    }
+
+    function ensureListShell() {
+      if (listScrollEl && bodySlot.contains(listScrollEl)) return;
+      spacerEl = h("div", { class: "cmds__spacer" });
+      viewportEl = h("div", { class: "cmds__viewport", role: "list" });
+      spacerEl.append(viewportEl);
+      listScrollEl = h("div", {
+        class: "cmds__list-scroll",
+        onScroll: () => {
+          if (scrollFrame) return;
+          scrollFrame = requestAnimationFrame(() => {
+            scrollFrame = 0;
+            renderWindow(false);
+          });
+        },
+      }, spacerEl);
+      const listBox = h("div", { class: "cmds__list-box" }, listScrollEl);
+      if (isDesktop) {
+        inspectorEl = h("aside", { class: "cmds__inspector", "aria-label": "Selected command" });
+        bodySlot.replaceChildren(h("div", { class: "cmds__split" }, listBox, inspectorEl));
+      } else {
+        inspectorEl = null;
+        bodySlot.replaceChildren(listBox);
+      }
+    }
+
+    function renderBodyOnly(resetScroll = false) {
       if (state.commands.length === 0) {
+        listScrollEl = null;
+        inspectorEl = null;
         const termKey = terminatorLabel(state.settings?.terminator || "space");
         bodySlot.replaceChildren(
           h("div", { class: "empty" },
@@ -536,8 +719,11 @@ const routeScreen = {
         return;
       }
 
-      const filtered = getFilteredCommands();
-      if (filtered.length === 0) {
+      currentFiltered = computeFiltered();
+      renderVersion++;
+      if (currentFiltered.length === 0) {
+        listScrollEl = null;
+        inspectorEl = null;
         bodySlot.replaceChildren(
           h("div", { class: "settings__card", style: { maxWidth: "480px" } },
             h("p", { class: "t-body", style: { color: "var(--on-surface-variant)" } },
@@ -550,10 +736,12 @@ const routeScreen = {
                 onClick: () => {
                   activeTab = "all";
                   set("ui", { ...state.ui, filter: "" });
+                  deepMatchQuery = "";
+                  deepMatchIds.clear();
                   if (searchInputEl) searchInputEl.value = "";
                   updateSearchDecor();
                   renderTabs();
-                  renderBodyOnly();
+                  renderBodyOnly(true);
                 },
               }, "Reset filters")
             )
@@ -562,29 +750,22 @@ const routeScreen = {
         return;
       }
 
-      let selected = filtered.find((c) => c.id === state.ui.selectedId);
+      let selected = currentFiltered.find((c) => c.id === state.ui.selectedId);
       if (!selected) {
-        selected = filtered[0];
+        selected = currentFiltered[0];
         set("ui", { ...state.ui, selectedId: selected.id });
       }
 
-      const listEl = h("div", { class: "cmds__list-box", role: "list" },
-        ...filtered.map((c) => buildRow(c, selected.id))
-      );
-
-      if (isDesktop) {
-        bodySlot.replaceChildren(
-          h("div", { class: "cmds__split" }, listEl, buildInspector(selected))
-        );
-      } else {
-        bodySlot.replaceChildren(listEl);
-      }
+      ensureListShell();
+      if (resetScroll && listScrollEl) listScrollEl.scrollTop = 0;
+      renderWindow(true);
+      if (isDesktop) updateInspector(selected);
     }
 
     function rerender() {
       renderHeadSlot();
       syncControls();
-      renderBodyOnly();
+      renderBodyOnly(false);
     }
 
     const onKeyDown = (e) => {
@@ -604,15 +785,25 @@ const routeScreen = {
         e.preventDefault();
         navigate("/commands/new");
       } else if (isDesktop && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
-        const list = getFilteredCommands();
-        if (!list.length) return;
+        if (!currentFiltered.length) return;
         e.preventDefault();
-        const idx = list.findIndex((c) => c.id === state.ui.selectedId);
+        const idx = currentFiltered.findIndex((c) => c.id === state.ui.selectedId);
         const nextIdx = e.key === "ArrowDown"
-          ? Math.min((idx === -1 ? 0 : idx + 1), list.length - 1)
+          ? Math.min((idx === -1 ? 0 : idx + 1), currentFiltered.length - 1)
           : Math.max((idx === -1 ? 0 : idx - 1), 0);
-        set("ui", { ...state.ui, selectedId: list[nextIdx].id });
-        renderBodyOnly();
+        const nextCmd = currentFiltered[nextIdx];
+        if (listScrollEl) {
+          const top = nextIdx * ROW_H;
+          const bottom = top + ROW_H;
+          if (top < listScrollEl.scrollTop) {
+            listScrollEl.scrollTop = top;
+            renderWindow(true);
+          } else if (bottom > listScrollEl.scrollTop + listScrollEl.clientHeight) {
+            listScrollEl.scrollTop = bottom - listScrollEl.clientHeight;
+            renderWindow(true);
+          }
+        }
+        selectInPlace(nextCmd);
       } else if (e.key === "Enter" && state.ui.selectedId && !document.activeElement?.closest("button, a")) {
         navigate(`/commands/${encodeURIComponent(state.ui.selectedId)}`);
       }
@@ -621,7 +812,8 @@ const routeScreen = {
 
     const onMediaChange = (e) => {
       isDesktop = e.matches;
-      renderBodyOnly();
+      listScrollEl = null;
+      renderBodyOnly(false);
     };
     mqDesktop.addEventListener("change", onMediaChange);
 
@@ -629,7 +821,8 @@ const routeScreen = {
       onState("commands:changed", rerender),
       onState("commands:reload", async () => {
         try {
-          const data = await request("/api/commands");
+          const data = await request("/api/commands?view=summary");
+          commandBodyCache.clear();
           set("commands", data?.commands || []);
           rerender();
         } catch {}
@@ -639,7 +832,7 @@ const routeScreen = {
     rerender();
 
     try {
-      const data = await request("/api/commands");
+      const data = await request("/api/commands?view=summary");
       if (Array.isArray(data?.commands)) {
         set("commands", data.commands);
         rerender();
@@ -650,6 +843,8 @@ const routeScreen = {
       title: "Commands",
       unmount() {
         clearTimeout(filterTimer);
+        clearTimeout(deepSearchTimer);
+        if (scrollFrame) cancelAnimationFrame(scrollFrame);
         document.removeEventListener("keydown", onKeyDown);
         mqDesktop.removeEventListener("change", onMediaChange);
         for (const off of unsubs) off();

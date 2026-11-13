@@ -1,14 +1,14 @@
 use crate::injector::{self, SELF_STAMP};
-use crate::store::AppState;
+use crate::store::{compact_preview, AppState};
 use crate::suggest::{self, SuggestItem, SuggestRequest};
 use std::sync::{Arc, Mutex, OnceLock};
 
 #[derive(Clone)]
 struct HookCommand {
+    id: String,
     trigger_lower: String,
     group_lower: String,
     preview: String,
-    text: String,
 }
 
 #[derive(Clone, Default)]
@@ -42,10 +42,10 @@ pub fn refresh_hook_snapshot(state: &AppState) {
         .iter()
         .filter(|c| c.enabled)
         .map(|c| HookCommand {
+            id: c.id.clone(),
             trigger_lower: c.trigger.to_ascii_lowercase(),
             group_lower: c.group.as_deref().unwrap_or("").to_ascii_lowercase(),
             preview: compact_preview(&c.text, 56),
-            text: c.text.clone(),
         })
         .collect();
     commands.sort_by(|a, b| a.trigger_lower.cmp(&b.trigger_lower));
@@ -64,27 +64,6 @@ pub fn refresh_hook_snapshot(state: &AppState) {
     if let Ok(mut guard) = cell.lock() {
         *guard = next;
     }
-}
-
-fn compact_preview(s: &str, max_chars: usize) -> String {
-    let mut out = String::with_capacity(max_chars + 4);
-    let mut prev_space = false;
-    for ch in s.chars() {
-        if out.chars().count() >= max_chars {
-            out.push_str("...");
-            break;
-        }
-        if ch == '\r' || ch == '\n' || ch == '\t' || ch == ' ' {
-            if !prev_space && !out.is_empty() {
-                out.push(' ');
-            }
-            prev_space = true;
-        } else {
-            out.push(ch);
-            prev_space = false;
-        }
-    }
-    out
 }
 
 #[cfg(windows)]
@@ -122,33 +101,36 @@ fn find_suggest_matches(query: &str, commands: &[HookCommand]) -> Vec<SuggestIte
     if query == "@" {
         for cmd in commands.iter().take(6) {
             out.push(SuggestItem {
+                id: cmd.id.clone(),
                 trigger: cmd.trigger_lower.clone(),
                 preview: cmd.preview.clone(),
-                text: cmd.text.clone(),
             });
         }
         return out;
     }
 
-    let needle = &query[1..];
-    for cmd in commands {
-        if cmd.trigger_lower.starts_with(query) {
-            out.push(SuggestItem {
-                trigger: cmd.trigger_lower.clone(),
-                preview: cmd.preview.clone(),
-                text: cmd.text.clone(),
-            });
-            if out.len() >= 6 {
-                return out;
-            }
+    let start = commands.partition_point(|c| c.trigger_lower.as_str() < query);
+    for cmd in &commands[start..] {
+        if !cmd.trigger_lower.starts_with(query) {
+            break;
+        }
+        out.push(SuggestItem {
+            id: cmd.id.clone(),
+            trigger: cmd.trigger_lower.clone(),
+            preview: cmd.preview.clone(),
+        });
+        if out.len() >= 6 {
+            return out;
         }
     }
+
+    let needle = &query[1..];
     for cmd in commands {
         if !cmd.trigger_lower.starts_with(query) && cmd.trigger_lower.contains(needle) {
             out.push(SuggestItem {
+                id: cmd.id.clone(),
                 trigger: cmd.trigger_lower.clone(),
                 preview: cmd.preview.clone(),
-                text: cmd.text.clone(),
             });
             if out.len() >= 6 {
                 return out;
@@ -158,9 +140,9 @@ fn find_suggest_matches(query: &str, commands: &[HookCommand]) -> Vec<SuggestIte
     for cmd in commands {
         if !cmd.trigger_lower.contains(needle) && cmd.group_lower.contains(needle) {
             out.push(SuggestItem {
+                id: cmd.id.clone(),
                 trigger: cmd.trigger_lower.clone(),
                 preview: cmd.preview.clone(),
-                text: cmd.text.clone(),
             });
             if out.len() >= 6 {
                 return out;
@@ -341,16 +323,16 @@ fn run_windows_ear_loop() {
                     return true;
                 }
                 if is_suggest_accept_key(vk, &snap.suggest_accept_key) {
-                    if let Some((erase_count, text, restore_clip, fallback, target_hwnd)) =
+                    if let Some((erase_count, command_id, restore_clip, fallback, target_hwnd)) =
                         suggest::take_selected_for_word(t.word_id)
                     {
                         t.buffer.clear();
                         t.word_id = suggest::next_word_id();
                         t.prev_was_word_char = false;
                         t.swallowed_vk = Some(vk);
-                        injector::expand_text(
+                        injector::expand_command_by_id(
                             erase_count,
-                            &text,
+                            &command_id,
                             restore_clip,
                             &fallback,
                             target_hwnd,
@@ -383,16 +365,16 @@ fn run_windows_ear_loop() {
             }
 
             if is_terminator_key(vk, &snap.terminator) {
-                let mut matched_text: Option<(usize, String)> = None;
+                let mut matched_cmd: Option<(usize, String)> = None;
                 if let Some(at_idx) = t.buffer.rfind('@') {
                     let candidate = &t.buffer[at_idx..];
                     if candidate.len() >= 2 && candidate.len() <= 32 {
-                        if let Some(cmd) = snap
+                        if let Ok(idx) = snap
                             .commands
-                            .iter()
-                            .find(|c| c.trigger_lower == candidate)
+                            .binary_search_by(|c| c.trigger_lower.as_str().cmp(candidate))
                         {
-                            matched_text = Some((candidate.chars().count(), cmd.text.clone()));
+                            matched_cmd =
+                                Some((candidate.chars().count(), snap.commands[idx].id.clone()));
                         }
                     }
                 }
@@ -401,11 +383,11 @@ fn run_windows_ear_loop() {
                 if vk == 0x09 {
                     t.last_click = None;
                 }
-                if let Some((erase_count, text)) = matched_text {
+                if let Some((erase_count, command_id)) = matched_cmd {
                     t.swallowed_vk = Some(vk);
-                    injector::expand_text(
+                    injector::expand_command_by_id(
                         erase_count,
-                        &text,
+                        &command_id,
                         snap.restore_clipboard,
                         &snap.injection_fallback,
                         cur_hwnd,

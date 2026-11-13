@@ -4,9 +4,9 @@ use std::sync::{Mutex, OnceLock};
 
 #[derive(Clone)]
 pub struct SuggestItem {
+    pub id: String,
     pub trigger: String,
     pub preview: String,
-    pub text: String,
 }
 
 #[derive(Clone)]
@@ -144,7 +144,7 @@ pub fn take_selected_for_word(word_id: u64) -> Option<(usize, String, bool, Stri
     let item = active.req.items.get(active.selected)?;
     let result = (
         active.req.erase_count,
-        item.text.clone(),
+        item.id.clone(),
         active.req.restore_clipboard,
         active.req.fallback.clone(),
         active.req.target_hwnd,
@@ -462,7 +462,7 @@ unsafe fn run_popup_loop() {
             let item = active.req.items.get(idx)?;
             let out = (
                 active.req.erase_count,
-                item.text.clone(),
+                item.id.clone(),
                 active.req.restore_clipboard,
                 active.req.fallback.clone(),
                 active.req.target_hwnd,
@@ -475,8 +475,14 @@ unsafe fn run_popup_loop() {
         VISIBLE_WORD_ID.store(0, Ordering::Release);
         ShowWindow(hwnd, SW_HIDE);
 
-        if let Some((erase_count, text, restore_clip, fallback, target_hwnd)) = picked {
-            injector::expand_text(erase_count, &text, restore_clip, &fallback, target_hwnd);
+        if let Some((erase_count, command_id, restore_clip, fallback, target_hwnd)) = picked {
+            injector::expand_command_by_id(
+                erase_count,
+                &command_id,
+                restore_clip,
+                &fallback,
+                target_hwnd,
+            );
         }
     }
 

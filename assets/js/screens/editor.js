@@ -1,5 +1,5 @@
 import { h, useIcon } from "../dom.js";
-import { state, set, emit } from "../store.js";
+import { state, set, emit, commandBodyCache } from "../store.js";
 import { request, ApiError } from "../api.js";
 import { navigate } from "../router.js";
 import { field, primaryButton, confirmDialog, toast, truncate, formatNum } from "../ui.js";
@@ -27,22 +27,24 @@ export async function renderEditor({ root, params }, { mode }) {
   const container = h("section", { class: "editor", "aria-labelledby": "editor-h" });
   root.replaceChildren(container);
 
-  if (!isNew && state.commands.length === 0) {
+  if (state.commands.length === 0) {
     try {
-      const data = await request("/api/commands");
+      const data = await request("/api/commands?view=summary");
       if (Array.isArray(data?.commands)) set("commands", data.commands);
     } catch {}
   }
 
   let existing = !isNew ? state.commands.find((c) => c.id === params.id) : null;
-  if (!isNew && !existing) {
+  if (!isNew && (!existing || typeof existing.text !== "string")) {
     try {
       const fetched = await request(`/api/commands/${encodeURIComponent(params.id)}`);
       if (fetched?.id) {
         existing = fetched;
-        set("commands", [...state.commands.filter((c) => c.id !== fetched.id), fetched]);
+        commandBodyCache.set(fetched.id, fetched.text || "");
       }
-    } catch {}
+    } catch {
+      existing = null;
+    }
   }
 
   if (!isNew && !existing) {
@@ -516,16 +518,31 @@ export async function renderEditor({ root, params }, { mode }) {
         ...(isNew ? (trimmedGroup ? { group: trimmedGroup } : {}) : { group: trimmedGroup }),
       };
       let saved = null;
+      const makeSummary = (item) => ({
+        id: item.id,
+        trigger: item.trigger,
+        enabled: item.enabled,
+        ...(item.group ? { group: item.group } : {}),
+        preview: truncate(item.text || "", 72),
+        lines: item.text ? item.text.split("\n").length : 0,
+        words: item.text && item.text.trim() ? item.text.trim().split(/\s+/).length : 0,
+        chars: (item.text || "").length,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+      });
       if (isNew) {
         saved = await request("/api/commands", { method: "POST", body });
         if (saved && !state.commands.some((c) => c.id === saved.id)) {
-          set("commands", [...state.commands, saved]);
+          commandBodyCache.set(saved.id, saved.text || "");
+          set("commands", [...state.commands, makeSummary(saved)]);
           set("ui", { ...state.ui, selectedId: saved.id, dirty: false });
         }
       } else {
         saved = await request(`/api/commands/${encodeURIComponent(existing.id)}`, { method: "PATCH", body });
         if (saved) {
-          set("commands", state.commands.map((c) => c.id === existing.id ? saved : c));
+          commandBodyCache.set(saved.id, saved.text || "");
+          const summary = makeSummary(saved);
+          set("commands", state.commands.map((c) => c.id === existing.id ? summary : c));
           set("ui", { ...state.ui, selectedId: saved.id, dirty: false });
         }
       }

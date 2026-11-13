@@ -1,5 +1,5 @@
 import { request, getPort } from "./api.js";
-import { state, set, emit, tokenGet } from "./store.js";
+import { state, set, emit, tokenGet, commandBodyCache } from "./store.js";
 
 let ws = null;
 let stopped = false;
@@ -12,7 +12,8 @@ async function syncCommands() {
   if (reloadInFlight) return;
   reloadInFlight = true;
   try {
-    const list = await request("/api/commands");
+    const list = await request("/api/commands?view=summary");
+    commandBodyCache.clear();
     set("commands", list?.commands || []);
     emit("commands:changed");
   } catch {} finally {
@@ -35,7 +36,19 @@ export function connectWS() {
   ws.addEventListener("message", (e) => {
     let msg;
     try { msg = JSON.parse(e.data); } catch { return; }
-    if (msg.type === "commands.changed") {
+    if (msg.type === "command.upserted" && msg.command?.id) {
+      commandBodyCache.delete(msg.command.id);
+      const list = state.commands.slice();
+      const idx = list.findIndex((c) => c.id === msg.command.id);
+      if (idx === -1) list.push(msg.command);
+      else list[idx] = msg.command;
+      set("commands", list);
+      emit("commands:changed");
+    } else if (msg.type === "command.deleted" && msg.id) {
+      commandBodyCache.delete(msg.id);
+      set("commands", state.commands.filter((c) => c.id !== msg.id));
+      emit("commands:changed");
+    } else if (msg.type === "commands.changed" || msg.type === "commands.reset") {
       clearTimeout(reloadTimer);
       reloadTimer = setTimeout(syncCommands, 120);
     } else if (msg.type === "hook.state") {

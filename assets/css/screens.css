@@ -114,17 +114,42 @@
     gap: var(--space-5);
     align-items: start;
   }
+  .tab-select {
+    height: 30px;
+    padding-inline: var(--space-2);
+    border-radius: var(--radius-control);
+    border: var(--border-structure);
+    background: var(--surface-container);
+    color: var(--on-surface);
+    font-size: var(--fs-caption);
+  }
   .cmds__list-box {
     border: var(--border-structure);
     border-radius: var(--radius-container);
     background: var(--surface-container);
     overflow: hidden;
   }
+  .cmds__list-scroll {
+    max-height: min(640px, calc(100vh - 250px));
+    overflow-y: auto;
+    position: relative;
+  }
+  .cmds__spacer {
+    position: relative;
+    width: 100%;
+  }
+  .cmds__viewport {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+  }
   .cmd-row {
     display: flex;
     align-items: center;
     gap: var(--space-3);
-    padding: var(--space-3) var(--space-4);
+    height: 60px;
+    padding-inline: var(--space-4);
     border-bottom: var(--border-structure);
     cursor: pointer;
   }

@@ -88,6 +88,7 @@ pub fn run_tray_loop(state: Arc<Mutex<AppState>>, ws_hub: WsHub) {
                         if let Some(ctx) = TRAY_CTX.get() {
                             ctx.ws_hub.broadcast(&json!({ "type": "daemon.stopping" }));
                         }
+                        crate::store::flush_pending_saves();
                         PostQuitMessage(0);
                     }
                     _ => {}

@@ -101,6 +101,8 @@ export function overflowMenu(items) {
         menu = null;
         trigger.setAttribute("aria-expanded", "false");
         document.removeEventListener("pointerdown", onDoc);
+        window.removeEventListener("scroll", close, true);
+        window.removeEventListener("resize", close);
       }
     }
     function onDoc(e) {
@@ -124,11 +126,24 @@ export function overflowMenu(items) {
           },
         }, it.label))
       );
-      trigger.parentElement.append(menu);
+      const rect = trigger.getBoundingClientRect();
+      menu.style.position = "fixed";
+      menu.style.insetInlineEnd = "auto";
+      menu.style.right = `${Math.max(8, window.innerWidth - rect.right)}px`;
+      menu.style.top = `${rect.bottom + 4}px`;
+      document.body.append(menu);
+      const mRect = menu.getBoundingClientRect();
+      if (mRect.bottom > window.innerHeight - 8 && rect.top - mRect.height - 4 >= 8) {
+        menu.style.top = `${rect.top - mRect.height - 4}px`;
+      }
       trigger.setAttribute("aria-expanded", "true");
       const enabledBtns = () => Array.from(menu.querySelectorAll("button:not(:disabled)"));
       enabledBtns()[0]?.focus();
-      setTimeout(() => document.addEventListener("pointerdown", onDoc), 0);
+      setTimeout(() => {
+        document.addEventListener("pointerdown", onDoc);
+        window.addEventListener("scroll", close, true);
+        window.addEventListener("resize", close);
+      }, 0);
       menu.addEventListener("keydown", (ev) => {
         if (ev.key === "Escape") {
           ev.preventDefault();

@@ -1,5 +1,7 @@
 export const bus = new EventTarget();
 
+export const commandBodyCache = new Map();
+
 export const state = {
   health: null,
   commands: [],
@@ -9,15 +11,9 @@ export const state = {
   cacheLoaded: false,
 };
 
-let saveTimer = null;
-
 export function set(key, value) {
   const prev = state[key];
   state[key] = value;
-  if (key === "commands" && Array.isArray(value)) {
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => cacheSave(value), 60);
-  }
   bus.dispatchEvent(new CustomEvent(`state:${key}`, { detail: { value, prev } }));
 }
 
@@ -39,19 +35,6 @@ export function emit(name, detail) {
   bus.dispatchEvent(new CustomEvent(name, { detail }));
 }
 
-const KEY = "mentions.cache.v1";
-
-export function cacheLoad() {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch { return null; }
-}
-
-export function cacheSave(data) {
-  try { localStorage.setItem(KEY, JSON.stringify(data)); } catch {}
-}
 
 export function tokenGet(origin) {
   try { return localStorage.getItem(`mentions.token.${origin}`); } catch { return null; }
@@ -63,10 +46,4 @@ export function tokenSet(origin, token) {
 
 export function tokenClear(origin) {
   try { localStorage.removeItem(`mentions.token.${origin}`); } catch {}
-}
-
-const initialCache = cacheLoad();
-if (Array.isArray(initialCache) && initialCache.length > 0) {
-  state.commands = initialCache;
-  state.cacheLoaded = true;
 }

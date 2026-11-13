@@ -1,4 +1,4 @@
-use crate::store::{self, AppState, CommandItem};
+use crate::store::{self, AppState, ArcCommandSlice, CommandItem, CommandSummary};
 use serde_json::{json, Value};
 use std::io::Read;
 use std::sync::{Arc, Mutex};
@@ -57,6 +57,7 @@ fn handle_request(mut req: Request, state: Arc<Mutex<AppState>>, ws_hub: WsHub) 
     if req.url() == "/api/internal/shutdown" && *req.method() == Method::Post {
         if header_value(&req, "origin").is_none() {
             ws_hub.broadcast(&json!({ "type": "daemon.stopping" }));
+            store::flush_pending_saves();
             let _ = req.respond(Response::empty(StatusCode(200)));
             std::process::exit(0);
         }
@@ -170,8 +171,23 @@ fn handle_request(mut req: Request, state: Arc<Mutex<AppState>>, ws_hub: WsHub) 
     }
 
     if path == "/api/commands" && *req.method() == Method::Get {
+        let is_summary = query.split('&').any(|kv| kv == "view=summary");
         let s = state.lock().unwrap();
-        let _ = send_json(req, 200, &origin, Some(json!({ "commands": s.commands })));
+        if is_summary {
+            let summaries: Vec<CommandSummary> = s
+                .commands
+                .iter()
+                .map(|c| store::summarize_command(c))
+                .collect();
+            let _ = send_json(req, 200, &origin, Some(json!({ "commands": summaries })));
+        } else {
+            let _ = send_json(
+                req,
+                200,
+                &origin,
+                Some(json!({ "commands": ArcCommandSlice(&s.commands) })),
+            );
+        }
         return;
     }
 
@@ -223,10 +239,7 @@ fn handle_request(mut req: Request, state: Arc<Mutex<AppState>>, ws_hub: WsHub) 
         }
 
         let mut s = state.lock().unwrap();
-        if s.commands
-            .iter()
-            .any(|c| c.trigger.eq_ignore_ascii_case(&trigger))
-        {
+        if s.has_trigger(&trigger) {
             let _ = send_json(
                 req,
                 409,
@@ -250,13 +263,53 @@ fn handle_request(mut req: Request, state: Arc<Mutex<AppState>>, ws_hub: WsHub) 
             created_at: now.clone(),
             updated_at: now,
         };
-        s.commands.push(item.clone());
+        let saved = s.insert_command(item);
+        let summary = store::summarize_command(&saved);
         s.save_commands();
         crate::hook::refresh_hook_snapshot(&s);
         drop(s);
 
-        ws_hub.broadcast(&json!({ "type": "commands.changed" }));
-        let _ = send_json(req, 201, &origin, Some(json!(item)));
+        ws_hub.broadcast(&json!({ "type": "command.upserted", "command": summary }));
+        let _ = send_json(req, 201, &origin, Some(json!(saved.as_ref())));
+        return;
+    }
+
+    if path == "/api/commands/search" && *req.method() == Method::Get {
+        let raw_q = query
+            .split('&')
+            .find_map(|kv| kv.strip_prefix("q="))
+            .unwrap_or("");
+        let needle = percent_decode(raw_q).trim().to_string();
+        if needle.is_empty() {
+            let _ = send_json(req, 200, &origin, Some(json!({ "ids": [] })));
+            return;
+        }
+        let needle_lower = needle.to_lowercase();
+        let ascii_needle = needle.is_ascii();
+        let s = state.lock().unwrap();
+        let ids: Vec<&str> = s
+            .commands
+            .iter()
+            .filter(|c| {
+                if ascii_needle {
+                    contains_ascii_icase(&c.trigger, needle.as_bytes())
+                        || c.group
+                            .as_deref()
+                            .map(|g| contains_ascii_icase(g, needle.as_bytes()))
+                            .unwrap_or(false)
+                        || contains_ascii_icase(&c.text, needle.as_bytes())
+                } else {
+                    c.trigger.to_lowercase().contains(&needle_lower)
+                        || c.group
+                            .as_deref()
+                            .map(|g| g.to_lowercase().contains(&needle_lower))
+                            .unwrap_or(false)
+                        || c.text.to_lowercase().contains(&needle_lower)
+                }
+            })
+            .map(|c| c.id.as_str())
+            .collect();
+        let _ = send_json(req, 200, &origin, Some(json!({ "ids": ids })));
         return;
     }
 
@@ -269,7 +322,7 @@ fn handle_request(mut req: Request, state: Arc<Mutex<AppState>>, ws_hub: WsHub) 
             Some(json!({
                 "schemaVersion": 1,
                 "exportedAt": store::iso_now(),
-                "commands": s.commands,
+                "commands": ArcCommandSlice(&s.commands),
                 "settings": s.settings
             })),
         );
@@ -277,7 +330,19 @@ fn handle_request(mut req: Request, state: Arc<Mutex<AppState>>, ws_hub: WsHub) 
     }
 
     if path == "/api/commands/import" && *req.method() == Method::Post {
-        let body = read_json_body(&mut req).unwrap_or_else(|| json!({}));
+        let body = match read_json_body_limit(&mut req, 64 * 1024 * 1024) {
+            Ok(Some(v)) => v,
+            Ok(None) => json!({}),
+            Err(status) => {
+                let _ = send_json(
+                    req,
+                    status,
+                    &origin,
+                    Some(json!({ "code": "E_TOO_LARGE", "message": "Import file too large" })),
+                );
+                return;
+            }
+        };
         let Some(arr) = body.get("commands").and_then(|v| v.as_array()) else {
             let _ = send_json(
                 req,
@@ -289,7 +354,7 @@ fn handle_request(mut req: Request, state: Arc<Mutex<AppState>>, ws_hub: WsHub) 
         };
 
         let now = store::iso_now();
-        let mut imported_list = Vec::new();
+        let mut raw_list = Vec::with_capacity(arr.len());
         for item in arr {
             let trig = item
                 .get("trigger")
@@ -300,13 +365,7 @@ fn handle_request(mut req: Request, state: Arc<Mutex<AppState>>, ws_hub: WsHub) 
             if !is_valid_trigger(trig) || txt.is_empty() || txt.len() > 65536 {
                 continue;
             }
-            if imported_list
-                .iter()
-                .any(|c: &CommandItem| c.trigger.eq_ignore_ascii_case(trig))
-            {
-                continue;
-            }
-            imported_list.push(CommandItem {
+            raw_list.push(CommandItem {
                 id: store::new_id(),
                 trigger: trig.to_string(),
                 text: txt.to_string(),
@@ -314,20 +373,22 @@ fn handle_request(mut req: Request, state: Arc<Mutex<AppState>>, ws_hub: WsHub) 
                 group: item
                     .get("group")
                     .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty()),
                 created_at: now.clone(),
                 updated_at: now.clone(),
             });
         }
 
+        let imported_list = store::dedupe_commands(raw_list);
         let count = imported_list.len();
         {
             let mut s = state.lock().unwrap();
-            s.commands = imported_list;
+            s.replace_all_commands(imported_list);
             s.save_commands();
             crate::hook::refresh_hook_snapshot(&s);
         }
-        ws_hub.broadcast(&json!({ "type": "commands.changed" }));
+        ws_hub.broadcast(&json!({ "type": "commands.reset" }));
         let _ = send_json(req, 200, &origin, Some(json!({ "imported": count })));
         return;
     }
@@ -337,8 +398,8 @@ fn handle_request(mut req: Request, state: Arc<Mutex<AppState>>, ws_hub: WsHub) 
             let method = req.method().clone();
             if method == Method::Get {
                 let s = state.lock().unwrap();
-                if let Some(cmd) = s.commands.iter().find(|c| c.id == id) {
-                    let _ = send_json(req, 200, &origin, Some(json!(cmd)));
+                if let Some(cmd) = s.get_command_by_id(id) {
+                    let _ = send_json(req, 200, &origin, Some(json!(cmd.as_ref())));
                 } else {
                     let _ = send_json(req, 404, &origin, Some(json!({ "code": "E_NOT_FOUND" })));
                 }
@@ -347,10 +408,11 @@ fn handle_request(mut req: Request, state: Arc<Mutex<AppState>>, ws_hub: WsHub) 
             if method == Method::Patch {
                 let body = read_json_body(&mut req).unwrap_or_else(|| json!({}));
                 let mut s = state.lock().unwrap();
-                let Some(idx) = s.commands.iter().position(|c| c.id == id) else {
+                let Some(idx) = s.get_index_by_id(id) else {
                     let _ = send_json(req, 404, &origin, Some(json!({ "code": "E_NOT_FOUND" })));
                     return;
                 };
+                let mut next = (*s.commands[idx]).clone();
                 if let Some(new_trig) = body.get("trigger").and_then(|v| v.as_str()) {
                     let trimmed = new_trig.trim();
                     if !is_valid_trigger(trimmed) {
@@ -366,24 +428,22 @@ fn handle_request(mut req: Request, state: Arc<Mutex<AppState>>, ws_hub: WsHub) 
                         );
                         return;
                     }
-                    if s.commands
-                        .iter()
-                        .enumerate()
-                        .any(|(i, c)| i != idx && c.trigger.eq_ignore_ascii_case(trimmed))
-                    {
-                        let _ = send_json(
-                            req,
-                            409,
-                            &origin,
-                            Some(json!({
-                                "code": "E_CONFLICT",
-                                "field": "trigger",
-                                "message": "Trigger already used"
-                            })),
-                        );
-                        return;
+                    if let Some(&other_idx) = s.trigger_index.get(&trimmed.to_ascii_lowercase()) {
+                        if other_idx != idx {
+                            let _ = send_json(
+                                req,
+                                409,
+                                &origin,
+                                Some(json!({
+                                    "code": "E_CONFLICT",
+                                    "field": "trigger",
+                                    "message": "Trigger already used"
+                                })),
+                            );
+                            return;
+                        }
                     }
-                    s.commands[idx].trigger = trimmed.to_string();
+                    next.trigger = trimmed.to_string();
                 }
                 if let Some(new_txt) = body.get("text").and_then(|v| v.as_str()) {
                     if new_txt.is_empty() || new_txt.len() > 65536 {
@@ -399,41 +459,42 @@ fn handle_request(mut req: Request, state: Arc<Mutex<AppState>>, ws_hub: WsHub) 
                         );
                         return;
                     }
-                    s.commands[idx].text = new_txt.to_string();
+                    next.text = new_txt.to_string();
                 }
                 if let Some(en) = body.get("enabled").and_then(|v| v.as_bool()) {
-                    s.commands[idx].enabled = en;
+                    next.enabled = en;
                 }
                 if let Some(grp) = body.get("group").and_then(|v| v.as_str()) {
                     let trimmed = grp.trim();
-                    s.commands[idx].group = if trimmed.is_empty() {
+                    next.group = if trimmed.is_empty() {
                         None
                     } else {
                         Some(trimmed.to_string())
                     };
                 }
-                s.commands[idx].updated_at = store::iso_now();
-                let updated = s.commands[idx].clone();
+                next.updated_at = store::iso_now();
+                let updated = s.replace_command_at(idx, next);
+                let summary = store::summarize_command(&updated);
                 s.save_commands();
                 crate::hook::refresh_hook_snapshot(&s);
                 drop(s);
 
-                ws_hub.broadcast(&json!({ "type": "commands.changed" }));
-                let _ = send_json(req, 200, &origin, Some(json!(updated)));
+                ws_hub.broadcast(&json!({ "type": "command.upserted", "command": summary }));
+                let _ = send_json(req, 200, &origin, Some(json!(updated.as_ref())));
                 return;
             }
             if method == Method::Delete {
                 let mut s = state.lock().unwrap();
-                let Some(idx) = s.commands.iter().position(|c| c.id == id) else {
+                let Some(idx) = s.get_index_by_id(id) else {
                     let _ = send_json(req, 404, &origin, Some(json!({ "code": "E_NOT_FOUND" })));
                     return;
                 };
-                s.commands.remove(idx);
+                s.remove_command_at(idx);
                 s.save_commands();
                 crate::hook::refresh_hook_snapshot(&s);
                 drop(s);
 
-                ws_hub.broadcast(&json!({ "type": "commands.changed" }));
+                ws_hub.broadcast(&json!({ "type": "command.deleted", "id": id }));
                 let _ = send_json(req, 204, &origin, None);
                 return;
             }
@@ -475,14 +536,6 @@ fn handle_request(mut req: Request, state: Arc<Mutex<AppState>>, ws_hub: WsHub) 
         }
         if let Some(st) = body.get("statsEnabled").and_then(|v| v.as_bool()) {
             s.settings.stats_enabled = st;
-        }
-        if let Some(sp) = body.get("suggestPopup").and_then(|v| v.as_bool()) {
-            s.settings.suggest_popup = sp;
-        }
-        if let Some(ak) = body.get("suggestAcceptKey").and_then(|v| v.as_str()) {
-            if matches!(ak, "tab" | "enter" | "both") {
-                s.settings.suggest_accept_key = ak.to_string();
-            }
         }
 
         s.save_settings();
@@ -609,12 +662,70 @@ fn header_value(req: &Request, name: &'static str) -> Option<String> {
 }
 
 fn read_json_body(req: &mut Request) -> Option<Value> {
+    read_json_body_limit(req, 512 * 1024).ok().flatten()
+}
+
+fn read_json_body_limit(req: &mut Request, max_bytes: u64) -> Result<Option<Value>, u16> {
     let mut buf = String::new();
-    req.as_reader().take(256 * 1024).read_to_string(&mut buf).ok()?;
-    if buf.trim().is_empty() {
-        return None;
+    if req
+        .as_reader()
+        .take(max_bytes + 1)
+        .read_to_string(&mut buf)
+        .is_err()
+    {
+        return Ok(None);
     }
-    serde_json::from_str(&buf).ok()
+    if buf.len() as u64 > max_bytes {
+        return Err(413);
+    }
+    if buf.trim().is_empty() {
+        return Ok(None);
+    }
+    Ok(serde_json::from_str(&buf).ok())
+}
+
+fn contains_ascii_icase(haystack: &str, needle: &[u8]) -> bool {
+    if needle.is_empty() {
+        return true;
+    }
+    let bytes = haystack.as_bytes();
+    if needle.len() > bytes.len() {
+        return false;
+    }
+    bytes.windows(needle.len()).any(|w| w.eq_ignore_ascii_case(needle))
+}
+
+fn percent_decode(input: &str) -> String {
+    let mut bytes = Vec::with_capacity(input.len());
+    let raw = input.as_bytes();
+    let mut i = 0;
+    while i < raw.len() {
+        if raw[i] == b'+' {
+            bytes.push(b' ');
+            i += 1;
+        } else if raw[i] == b'%' && i + 2 < raw.len() {
+            if let (Some(hi), Some(lo)) = (hex_val(raw[i + 1]), hex_val(raw[i + 2])) {
+                bytes.push((hi << 4) | lo);
+                i += 3;
+                continue;
+            }
+            bytes.push(raw[i]);
+            i += 1;
+        } else {
+            bytes.push(raw[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8_lossy(&bytes).into_owned()
+}
+
+fn hex_val(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
 }
 
 fn send_json(

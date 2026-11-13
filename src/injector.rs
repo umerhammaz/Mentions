@@ -1,3 +1,4 @@
+use crate::store::AppState;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
@@ -9,19 +10,31 @@ pub const SELF_STAMP: usize = 0x4D45_4E54;
 struct ExpandJob {
     id: u64,
     erase_count: usize,
-    text: String,
+    command_id: String,
     restore_clipboard: bool,
     fallback: String,
     target_hwnd: isize,
 }
 
 static JOB_SEQ: AtomicU64 = AtomicU64::new(0);
+static APP_STATE: OnceLock<Arc<Mutex<AppState>>> = OnceLock::new();
 static WORKER: OnceLock<Arc<(Mutex<VecDeque<ExpandJob>>, Condvar)>> = OnceLock::new();
 
+pub fn init_injector_state(state: Arc<Mutex<AppState>>) {
+    let _ = APP_STATE.set(state);
+}
+
 #[cfg(windows)]
-pub fn expand_text(
+fn lookup_enabled_text(command_id: &str) -> Option<String> {
+    let cell = APP_STATE.get()?;
+    let guard = cell.lock().ok()?;
+    guard.get_enabled_text_by_id(command_id)
+}
+
+#[cfg(windows)]
+pub fn expand_command_by_id(
     erase_count: usize,
-    text: &str,
+    command_id: &str,
     restore_clipboard: bool,
     fallback: &str,
     target_hwnd: isize,
@@ -33,7 +46,7 @@ pub fn expand_text(
         q.push_back(ExpandJob {
             id,
             erase_count,
-            text: text.to_string(),
+            command_id: command_id.to_string(),
             restore_clipboard,
             fallback: fallback.to_string(),
             target_hwnd,
@@ -43,9 +56,9 @@ pub fn expand_text(
 }
 
 #[cfg(not(windows))]
-pub fn expand_text(
+pub fn expand_command_by_id(
     _erase_count: usize,
-    _text: &str,
+    _command_id: &str,
     _restore_clipboard: bool,
     _fallback: &str,
     _target_hwnd: isize,
@@ -101,6 +114,10 @@ unsafe fn run_worker(queue: Arc<(Mutex<VecDeque<ExpandJob>>, Condvar)>) {
         let job = pop_next_job(&queue);
         pump_owner_messages(owner_hwnd);
 
+        let Some(text) = lookup_enabled_text(&job.command_id) else {
+            continue;
+        };
+
         if !is_same_target_window(job.target_hwnd) {
             continue;
         }
@@ -119,8 +136,8 @@ unsafe fn run_worker(queue: Arc<(Mutex<VecDeque<ExpandJob>>, Condvar)>) {
             continue;
         }
 
-        if job.fallback == "unicode" && job.text.len() <= 512 {
-            send_unicode_string_safe(&job.text, job.target_hwnd);
+        if job.fallback == "unicode" && text.len() <= 512 {
+            send_unicode_string_safe(&text, job.target_hwnd);
             continue;
         }
 
@@ -130,8 +147,8 @@ unsafe fn run_worker(queue: Arc<(Mutex<VecDeque<ExpandJob>>, Condvar)>) {
             None
         };
 
-        if !write_stealth_clipboard(owner_hwnd, &job.text) {
-            send_unicode_string_safe(&job.text, job.target_hwnd);
+        if !write_stealth_clipboard(owner_hwnd, &text) {
+            send_unicode_string_safe(&text, job.target_hwnd);
             continue;
         }
 
@@ -150,7 +167,7 @@ unsafe fn run_worker(queue: Arc<(Mutex<VecDeque<ExpandJob>>, Condvar)>) {
         }
 
         if let Some(snap) = snapshot {
-            let extra_ms = ((job.text.len() / 2000).min(5) as u64) * 50;
+            let extra_ms = ((text.len() / 2000).min(5) as u64) * 50;
             let floor = Duration::from_millis(RESTORE_BASE_MS + extra_ms);
             if wait_cancelable(&queue, owner_hwnd, job.id, seq_after_set, floor) {
                 continue;

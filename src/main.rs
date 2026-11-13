@@ -38,6 +38,7 @@ fn main() {
 
     let ws_hub = server::WsHub::new();
 
+    injector::init_injector_state(Arc::clone(&state));
     suggest::start_suggest_engine();
     hook::start_hook_engine(Arc::clone(&state));
     server::start_http_server(Arc::clone(&state), ws_hub.clone());
@@ -59,6 +60,7 @@ fn acquire_or_replace_instance(port: u16) -> Option<InstanceGuard> {
 }
 
 pub fn restart_daemon() {
+    store::flush_pending_saves();
     if let Ok(exe) = std::env::current_exe() {
         let _ = std::process::Command::new(exe).spawn();
         std::process::exit(0);
