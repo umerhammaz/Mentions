@@ -702,11 +702,12 @@ unsafe fn restore_clipboard_snapshot(
     snap: &ClipboardSnapshot,
     expected_seq: u32,
 ) {
+    use windows_sys::Win32::Foundation::GlobalFree;
     use windows_sys::Win32::System::DataExchange::{
         CloseClipboard, EmptyClipboard, GetClipboardSequenceNumber, SetClipboardData,
     };
     use windows_sys::Win32::System::Memory::{
-        GlobalAlloc, GlobalFree, GlobalLock, GlobalUnlock, GMEM_MOVEABLE,
+        GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE,
     };
 
     if !snap.was_empty && snap.formats.is_empty() {
@@ -747,11 +748,12 @@ unsafe fn write_stealth_clipboard(
     owner_hwnd: windows_sys::Win32::Foundation::HWND,
     text: &str,
 ) -> bool {
+    use windows_sys::Win32::Foundation::GlobalFree;
     use windows_sys::Win32::System::DataExchange::{
         CloseClipboard, EmptyClipboard, SetClipboardData,
     };
     use windows_sys::Win32::System::Memory::{
-        GlobalAlloc, GlobalFree, GlobalLock, GlobalUnlock, GMEM_MOVEABLE,
+        GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE,
     };
 
     const CF_UNICODETEXT: u32 = 13;
@@ -814,9 +816,10 @@ unsafe fn write_stealth_clipboard(
 
 #[cfg(windows)]
 unsafe fn set_clipboard_dword_flag(name: &str, value: u32) {
+    use windows_sys::Win32::Foundation::GlobalFree;
     use windows_sys::Win32::System::DataExchange::{RegisterClipboardFormatW, SetClipboardData};
     use windows_sys::Win32::System::Memory::{
-        GlobalAlloc, GlobalFree, GlobalLock, GlobalUnlock, GMEM_MOVEABLE,
+        GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE,
     };
 
     let wide: Vec<u16> = name.encode_utf16().collect();
