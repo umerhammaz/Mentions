@@ -1,0 +1,49 @@
+{
+  "v": 2,
+  "id": "zc_mweo85z4_q7d5",
+  "sid": "s_mweo85z2_le31",
+  "repo": "umerhammaz/mentions",
+  "ts": 1794555862256,
+  "sha": "d5770af0459933a146f301160548d9fb72f6d3e4",
+  "branch": "main",
+  "delivery": "direct",
+  "msgSubj": "feat(sync): Synchronized 1 file(s) across 1 prompt turn(s)",
+  "msgHash": "bae5e83705ee04ed",
+  "files": [
+    [
+      "assets/mentions_logo.png",
+      "m",
+      "man",
+      1,
+      0
+    ]
+  ],
+  "sum": {
+    "files": 1,
+    "add": 0,
+    "mod": 1,
+    "del": 0,
+    "src": {
+      "man": 1
+    }
+  },
+  "warn": {
+    "quarantine": 0,
+    "halluc": 0,
+    "secret": 0,
+    "runtime": 0,
+    "override": false
+  },
+  "safety": {
+    "canary": "8/8",
+    "vault": "persistent"
+  },
+  "base": {
+    "gen": 1,
+    "anc": "T",
+    "race": 0
+  },
+  "verify": 1,
+  "ms": 4708,
+  "hash": "d656f120283f1bba"
+}
