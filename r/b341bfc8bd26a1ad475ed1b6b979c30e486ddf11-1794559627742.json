@@ -1,0 +1,161 @@
+{
+  "v": 2,
+  "id": "zc_mweqguvv_fxf6",
+  "sid": "s_mwepxdgb_o1ts",
+  "repo": "umerhammaz/mentions",
+  "ts": 1794559627742,
+  "sha": "b341bfc8bd26a1ad475ed1b6b979c30e486ddf11",
+  "branch": "main",
+  "delivery": "direct",
+  "msgSubj": "feat(sync): Synchronized 17 file(s) across 1 prompt turn(s)",
+  "msgHash": "9349fc5355362e2c",
+  "files": [
+    [
+      "index.html",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "404.html",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/css/reset.css",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/css/tokens.css",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/css/base.css",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/css/layout.css",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/css/components.css",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/css/screens.css",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/js/store.js",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/js/ws.js",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/js/router.js",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/js/api.js",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/js/main.js",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/js/screens/pair.js",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/js/screens/commands.js",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/js/screens/editor.js",
+      "m",
+      "ai",
+      1,
+      0
+    ],
+    [
+      "assets/js/screens/settings.js",
+      "m",
+      "ai",
+      1,
+      0
+    ]
+  ],
+  "sum": {
+    "files": 17,
+    "add": 0,
+    "mod": 17,
+    "del": 0,
+    "src": {
+      "ai": 17
+    }
+  },
+  "warn": {
+    "quarantine": 0,
+    "halluc": 0,
+    "secret": 0,
+    "runtime": 0,
+    "override": false
+  },
+  "safety": {
+    "canary": "8/8",
+    "vault": "persistent"
+  },
+  "base": {
+    "gen": 0,
+    "anc": "T",
+    "race": 0
+  },
+  "verify": 1,
+  "ms": 9299,
+  "hash": "ad05313685285bde"
+}
