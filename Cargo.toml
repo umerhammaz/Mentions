@@ -33,9 +33,11 @@ features = [
   "Win32_UI_WindowsAndMessaging",
 ]
 
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"
+
 [profile.release]
-opt-level = "z"
+opt-level = 3
 lto = true
 codegen-units = 1
 panic = "abort"
-strip = true

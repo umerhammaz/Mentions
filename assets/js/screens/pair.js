@@ -174,6 +174,9 @@ const screen = {
               )
             : null,
           downloadBtn,
+          h("p", { class: "t-caption" },
+            "If Edge asks about a new release, choose Keep to allow it. Future updates install inside the app."
+          ),
           h("ol", { class: "gate__list" },
             h("li", { class: "gate__list-item" },
               h("span", { class: "gate__num" }, "01"),
