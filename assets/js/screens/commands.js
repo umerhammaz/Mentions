@@ -315,10 +315,10 @@ const routeScreen = {
           onClick: () => {
             const nextDesc = state.ui.sort !== "-trigger";
             set("ui", { ...state.ui, sort: nextDesc ? "-trigger" : "trigger" });
-            sortBtn.textContent = nextDesc ? "Trigger ↓" : "Trigger ↑";
+            sortBtn.textContent = nextDesc ? "⌨ Shortcut ▼" : "⌨ Shortcut ▲";
             renderBodyOnly(true);
           },
-        }, desc ? "Trigger ↓" : "Trigger ↑");
+        }, desc ? "⌨ Shortcut ▼" : "⌨ Shortcut ▲");
         tabsHostEl = h("div", { class: "cmds__tabs" });
         controlsSlot.replaceChildren(
           h("div", { class: "cmds__search-bar" },

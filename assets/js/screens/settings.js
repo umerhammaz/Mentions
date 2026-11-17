@@ -120,7 +120,7 @@ const screen = {
     card("connection", "Connection", () => [
       h("div", { class: "settings__row" },
         h("div", { class: "settings__row-text" },
-          h("span", { class: "t-body" }, "Daemon port"),
+          h("span", { class: "t-body" }, "App port"),
           h("span", { class: "t-caption" }, "Changing this restarts the Windows app on the new port.")
         ),
         h("div", { style: { display: "flex", gap: "var(--space-2)", alignItems: "center", flexWrap: "wrap" } },
@@ -294,7 +294,7 @@ const screen = {
 
     card("diagnostics", "Diagnostics", () => [
       h("dl", { style: { display: "grid", gridTemplateColumns: "max-content 1fr", gap: "var(--space-2) var(--space-5)", fontSize: "var(--fs-label)", alignItems: "center" } },
-        dt("Daemon version"), dd(state.health?.daemonVersion || "—"),
+        dt("App version"), dd(state.health?.daemonVersion || "—"),
         dt("Update status"), dd(versionStatusSlot),
         dt("API version"), dd(state.health?.apiVersion || "—"),
         dt("Hook active"), dd(state.health?.hookActive ? "Yes" : "No"),

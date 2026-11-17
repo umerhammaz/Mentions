@@ -81,7 +81,7 @@ on("state:health", async ({ detail }) => {
     hookToggle.textContent = hh?.paused ? "Resume" : "Pause";
     hookToggle.setAttribute("aria-pressed", hh?.paused ? "true" : "false");
     if (railVersion) {
-      railVersion.textContent = unlocked && hh?.daemonVersion ? `Daemon v${hh.daemonVersion}` : "";
+      railVersion.textContent = unlocked && hh?.daemonVersion ? `Mentions v${hh.daemonVersion}` : "";
     }
     if (hh?.state === "online" || hh?.state === "paused") {
       connectWS();
